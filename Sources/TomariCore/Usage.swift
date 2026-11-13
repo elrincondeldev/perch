@@ -126,7 +126,7 @@ public enum LimitsReport {
     public static func lines(limits: AccountLimits?, session: SessionUsage?, spend: DailySpend?, at now: Date, calendar: Calendar = .current) -> [String] {
         var lines: [String] = []
         if let limits, limits.isStale(at: now) {
-            lines.append("no update for \(untilReset(now, from: limits.updatedAt)) · use Claude Code to refresh")
+            lines.append("last update \(untilReset(now, from: limits.updatedAt)) ago")
         }
         if let live = limits?.live(at: now) {
             if let window = live.fiveHour { lines.append(window.line("5h", at: now)) }

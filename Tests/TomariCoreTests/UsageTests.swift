@@ -169,9 +169,9 @@ func staleTests() {
         expectEqual(limits.isStale(at: now + 13 * 60), true)
     }
 
-    test("stale limits say how long it has been, ahead of the windows") {
+    test("stale limits say when they were last confirmed, ahead of the windows") {
         let lines = LimitsReport.lines(limits: limits, session: nil, spend: nil, at: now + 3 * 3600 + 120)
-        expectEqual(lines.first, "no update for 3h 2m · use Claude Code to refresh")
+        expectEqual(lines.first, "last update 3h 2m ago")
         expectEqual(lines.count, 2)
         expectEqual(LimitsReport.lines(limits: limits, session: nil, spend: nil, at: now + 60).count, 1)
     }
