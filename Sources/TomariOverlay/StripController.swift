@@ -26,7 +26,7 @@ final class StripController {
     private static let collapsedKey = "collapsed"
     private static let showLimitsKey = "showLimits"
     private var collapsed: Bool
-    /// Whether the strip has room for the limits cell right now: wanted, and some window still counts.
+    /// Whether the strip shows the limits cell (the menu can turn it off).
     private var limitsCell = false
 
     var hidden = false {
@@ -99,7 +99,10 @@ final class StripController {
             var appearances = shown.map {
                 CreatureAppearance(session: $0, focused: $0.id == focusedId, hovered: hovered == .session($0.id), frame: frame, now: now)
             }
-            if limitsCell, let meters = link.list.limits?.meters(at: now) {
+            if limitsCell {
+                // Empty bars until Claude Code reports the limits, so the cell is there from the start.
+                var meters = link.list.limits?.meters(at: now) ?? []
+                if meters.isEmpty { meters = [LimitMeter(label: "5h", usedPct: 0), LimitMeter(label: "7d", usedPct: 0)] }
                 appearances.append(CreatureAppearance.limits(meters, hovered: hovered == .limits))
             }
             view.show(appearances + [CreatureAppearance.addButton(hovered: hovered == .add)])
@@ -115,7 +118,7 @@ final class StripController {
     }
 
     private func limitsAvailable(at now: Date) -> Bool {
-        showLimits && !(link.list.limits?.meters(at: now).isEmpty ?? true)
+        showLimits
     }
 
     /// The cell after the last session, when there is one.
@@ -141,7 +144,10 @@ final class StripController {
             let level = link.list.limits?.meters(at: now).map(\.level)
             let color = level?.contains(.hot) == true ? failed : level?.contains(.warm) == true ? NSColor(paint: .accent) : Style.text
             let rest = lines.dropFirst().joined(separator: "\n")
-            return content("Claude usage", lines.first ?? "no data yet", color, beside: layout.cellFrame(index, in: strip), detail: rest.isEmpty ? nil : rest)
+            if lines.isEmpty {
+                return content("Claude usage", "no data yet", Style.muted, beside: layout.cellFrame(index, in: strip), detail: "send a message in a new Claude Code session")
+            }
+            return content("Claude usage", lines[0], color, beside: layout.cellFrame(index, in: strip), detail: rest.isEmpty ? nil : rest)
         case .add:
             let status = failure ?? "pin any session from the Claude app"
             return content("Add a session", status, failure != nil ? failed : Style.muted, beside: layout.cellFrame(addIndex, in: strip))
