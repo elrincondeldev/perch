@@ -4,8 +4,9 @@ import { parseCommand } from "./cli.ts";
 test("subcommands and their flags", () => {
   expect(parseCommand(["agent"])).toEqual({ name: "agent", lan: false });
   expect(parseCommand(["agent", "--lan"])).toEqual({ name: "agent", lan: true });
-  expect(parseCommand(["setup"])).toEqual({ name: "setup", pi: false });
-  expect(parseCommand(["setup", "--pi"])).toEqual({ name: "setup", pi: true });
+  expect(parseCommand(["setup"])).toEqual({ name: "setup", pi: false, noStatusline: false });
+  expect(parseCommand(["setup", "--pi"])).toEqual({ name: "setup", pi: true, noStatusline: false });
+  expect(parseCommand(["setup", "--no-statusline", "--pi"])).toEqual({ name: "setup", pi: true, noStatusline: true });
   expect(parseCommand(["status"])).toEqual({ name: "status" });
   expect(parseCommand(["uninstall"])).toEqual({ name: "uninstall", purge: false });
   expect(parseCommand(["uninstall", "--purge"])).toEqual({ name: "uninstall", purge: true });

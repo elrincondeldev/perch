@@ -13,7 +13,7 @@ try {
       await runAgent({ lan: command.lan });
       break;
     case "setup":
-      await setup({ pi: command.pi });
+      await setup({ pi: command.pi, statusline: !command.noStatusline });
       break;
     case "status":
       await status(VERSION);

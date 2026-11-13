@@ -1,6 +1,6 @@
 export type Command =
   | { name: "agent"; lan: boolean }
-  | { name: "setup"; pi: boolean }
+  | { name: "setup"; pi: boolean; noStatusline: boolean }
   | { name: "status" }
   | { name: "uninstall"; purge: boolean }
   | { name: "version" }
@@ -8,8 +8,10 @@ export type Command =
 
 export const USAGE = `Usage: tomari <command>
 
-  setup [--pi]         install the agent, the strip and the Claude Code hooks, and start them
+  setup [--pi] [--no-statusline]
+                       install the agent, the strip and the Claude Code hooks, and start them
                        --pi also lets a claude-panel Raspberry Pi connect over the LAN
+                       --no-statusline leaves your statusLine alone, so no cost, context or limits
   status               show what is installed and running
   uninstall [--purge]  remove everything; --purge also deletes pins and icons without asking
   agent [--lan]        run the agent in the foreground (what the LaunchAgent runs)
@@ -17,7 +19,7 @@ export const USAGE = `Usage: tomari <command>
 
 const FLAGS: Record<string, Record<string, string>> = {
   agent: { "--lan": "lan" },
-  setup: { "--pi": "pi" },
+  setup: { "--pi": "pi", "--no-statusline": "noStatusline" },
   status: {},
   uninstall: { "--purge": "purge" },
 };

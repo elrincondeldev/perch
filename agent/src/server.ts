@@ -11,6 +11,7 @@ import type { SessionHub } from "./hub.ts";
 import { openSession, type OpenResult } from "./open-session.ts";
 import { parseClientMessage } from "./protocol-guard.ts";
 import type { HookEvent } from "./state.ts";
+import { parseStatusline } from "./usage.ts";
 
 export interface ServerOptions {
   hub: SessionHub;
@@ -25,6 +26,8 @@ export interface ServerOptions {
 
 const TOPIC = "panel";
 const LIBRARY_SIZE = 100;
+/** A real statusline payload is about 2 KB. */
+const MAX_STATUSLINE_BYTES = 64 * 1024;
 
 export function startServers({
   hub,
@@ -59,6 +62,14 @@ export function startServers({
     port: hookPort,
     async fetch(req) {
       const { pathname } = new URL(req.url);
+      if (req.method === "POST" && pathname === "/statusline") {
+        const body = await req.text();
+        if (body.length > MAX_STATUSLINE_BYTES) return new Response("too large", { status: 413 });
+        const reading = parseStatusline(body, Date.now());
+        if (!reading) return new Response("bad statusline", { status: 400 });
+        hub.handleStatusline(reading);
+        return new Response(null, { status: 204 });
+      }
       if (req.method !== "POST" || pathname !== "/hook") return new Response("not found", { status: 404 });
       try {
         const event = (await req.json()) as HookEvent;
@@ -86,6 +97,10 @@ export function startServers({
       open(ws) {
         ws.subscribe(TOPIC);
         send(ws, { type: "snapshot", sessions: hub.snapshot(), focusedId: hub.focusedId });
+        const limits = hub.currentLimits();
+        if (limits) send(ws, { type: "limits", limits });
+        const spend = hub.currentSpend();
+        if (spend) send(ws, { type: "spend", spend });
       },
       async message(ws, raw) {
         const msg = parseClientMessage(String(raw));

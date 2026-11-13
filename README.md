@@ -20,6 +20,7 @@ That's all: the strip appears on the right edge with a **+** to pin your session
 
 - copies Tomari's binaries into `~/Library/Application Support/tomari/bin`;
 - adds hooks to `~/.claude/settings.json`, after backing it up, so Claude Code reports each event to Tomari's agent;
+- sets Claude Code's `statusLine` to a small command that also sends its usage data to the agent, and still runs your own statusline command if you have one, on the same input (`--no-statusline` skips this);
 - starts the agent and the strip now and at every login, as LaunchAgents;
 - replaces [claude-panel](https://github.com/elrincondeldev/claude-panel)'s agent if you have it, keeping its pinned sessions, their looks and its pairing token;
 - moves an install from when Tomari was called Perch (`@elrincondeldev/perch`) into Tomari's places, keeping its pins, icons and token.
@@ -28,6 +29,7 @@ That's all: the strip appears on the right edge with a **+** to pin your session
 npx tomari status             # what's installed and running
 npx tomari uninstall          # remove everything; asks before deleting pins and icons
 npx tomari setup --pi         # also let a claude-panel Raspberry Pi connect over your network
+npx tomari setup --no-statusline   # leave your statusLine alone: no cost, context or limits
 ```
 
 You need the Claude desktop app (sessions in its Code tab), the Claude Code CLI 2.1.285 or newer, and Node.js 18 or newer for `npx`.
@@ -37,7 +39,13 @@ You need the Claude desktop app (sessions in its Code tab), the Claude Code CLI 
 - **The sessions you choose**: the **+** at the end of the strip lists every session in the Claude desktop app, recent or old, running or stopped; pick one to pin it. Sessions you haven't pinned show up only while they work or wait for you, and for five minutes after they finish, so a fresh install starts with just the +.
 - **One creature per session**, animated by its state: working, needs permission, asking you, compacting, done, error or closed. Finished sessions fall asleep after five minutes.
 - **Hard to miss when it needs you**: a permission request blinks the creature's tile in orange; a question rings it in orange. A working creature hops with typing dots over its head, and one that finished its turn holds up a green check, ringed in green, until you reply or it falls asleep.
-- **Hover** for the session's name and status, e.g. `Bash: npm test` or `done · 5m`.
+- **Hover** for the session's name and status, e.g. `Bash: npm test` or `done · 5m`, and under it its context, tokens and cost (`ctx 7% · 46k tok · $0.50`). Hovering the tab shows your 5-hour and 7-day limits.
+<p align="center"><img src="images/usage-limits.png" alt="The limits cell in the strip, with its hover showing the 5-hour and 7-day limits and when each resets" width="320"></p>
+
+- **Limits cell**: a cell in the strip, before the add button, with a bar for the 5-hour and the 7-day limit, orange from 70 % and red from 90 % (the tile gets a red ring). Hover it for each window's reset time, the cost, tokens and context of the session in front, and today's total spend; click it to open claude.ai's usage page. It is there from the start, with empty bars until Claude Code reports your limits. "Hide Limits" in the menu bar menu removes it.
+- **Limits at launch** (unofficial): on start and every 5 minutes the agent asks Anthropic's undocumented `https://api.anthropic.com/api/oauth/usage` for your 5-hour and 7-day limits, the call Claude Code's `/status` makes, so the cell is filled before any session answers. It reads Claude Code's OAuth token (macOS Keychain item `Claude Code-credentials`, or `~/.claude/.credentials.json`), uses it for that one request and never logs or stores it. macOS asks for Keychain access the first time. The endpoint may change or disappear without notice; if the call fails, the statusline stays the only source. Set `TOMARI_NO_OAUTH_USAGE=1` for the agent to turn it off.
+- **Limitation**: the 5-hour and 7-day percentages come from Claude Code's statusline or, at launch, from the token Claude Code keeps in the Keychain. That token expires after about 8 hours and only the `claude` command line refreshes it. If you only use the Claude desktop app, no source reports the limits (the desktop app does not run the statusline), so after a few hours the cell is dimmed and its hover says when the limits were last confirmed.
+- **Usage limits** in the menu bar menu: how much of each window you have used, when it resets, and today's spend. Claude Code reports these for Pro and Max plans only, after the first response of a session; with an API key there are none.
 - **Click** to open the session in the Claude desktop app, even one the app has stopped. The session in front is ringed in white.
 - **Right-click** (or control-click) to pin or unpin the session and pick its character and color.
 - **Stays out of the way**: the strip floats over every Space and full-screen app and never takes focus from the app you're using. The arrow tab beside it slides the strip off the edge, leaving just the tab, which blinks orange when a session needs you; click it again to bring the strip back.
@@ -58,6 +66,7 @@ claude agents ─ poll ─▶  └ SQLite: pins, icons                       └
 |---|---|---|
 | Hooks in `~/.claude/settings.json` | Instant state changes | Yes |
 | `claude agents --json` | Names, who is alive, corrections for missed hooks | Yes |
+| `statusLine` JSON on stdin | Session cost, context and tokens; the account's 5-hour and 7-day limits | Yes |
 | `claude --desktop --resume <id>` | Opening a session the desktop app doesn't know | Yes |
 | `claude://code/continue?session=local_…` | Opening any desktop-app session, running or stopped | No |
 | `~/Library/Application Support/Claude/claude-code-sessions/` | The app's sessions, and their `local_…` ids | No |
@@ -112,6 +121,7 @@ On Vercel, import the repository and set its Root Directory to `site`; Vercel de
 - The WebSocket needs the pairing token in `~/Library/Application Support/tomari/config.json`, and accepts only `open`, `pin`, `icon` and `library`, with validated arguments.
 - Tomari keeps its data in `~/Library/Application Support/tomari/`, its logs in `~/Library/Logs/tomari/`, and the strip's edge in the `com.elrincondeldev.tomari` defaults.
 - The hover label can show tool details such as a shell command, so anyone who can see your screen can read them.
+- The statusline data goes to the agent on 127.0.0.1 and stays in its memory, except one number per day (today's total cost) and the last cost of each session, kept in the agent's SQLite database for two weeks so a restart doesn't count a session twice. The last known limits are kept there too, so a restart has something to show. The OAuth token used for the limits request is never written anywhere.
 
 ## Roadmap
 

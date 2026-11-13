@@ -4,9 +4,10 @@ import TomariCore
 
 @MainActor
 final class StripController {
-    /// What the pointer can be over: a session's creature, the add button after the last one, or the tab.
+    /// What the pointer can be over: a session's creature, the limits cell and the add button after the last one, or the tab.
     private enum Cell: Equatable {
         case session(String)
+        case limits
         case add
         case tab
     }
@@ -23,10 +24,20 @@ final class StripController {
     private static let framesPerSecond = 4.0
     private static let edgeKey = "edge"
     private static let collapsedKey = "collapsed"
+    private static let showLimitsKey = "showLimits"
     private var collapsed: Bool
+    /// Whether the strip shows the limits cell (the menu can turn it off).
+    private var limitsCell = false
 
     var hidden = false {
         didSet { relayout() }
+    }
+
+    var showLimits: Bool {
+        didSet {
+            Preferences.store.set(showLimits, forKey: Self.showLimitsKey)
+            relayout()
+        }
     }
 
     var edge: ScreenEdge {
@@ -40,6 +51,7 @@ final class StripController {
         self.link = link
         edge = Preferences.store.string(forKey: Self.edgeKey).flatMap(ScreenEdge.init(rawValue:)) ?? .right
         collapsed = Preferences.store.bool(forKey: Self.collapsedKey)
+        showLimits = Preferences.store.object(forKey: Self.showLimitsKey) as? Bool ?? true
         view.onHover = { [weak self] hit in self?.hover(hit) }
         view.onClick = { [weak self] hit in self?.click(hit) }
         view.menuFor = { [weak self] index in self?.menu(for: index) }
@@ -54,7 +66,9 @@ final class StripController {
     }
 
     private func relayout() {
-        shown = link.list.shown(at: Date())
+        let now = Date()
+        shown = link.list.shown(at: now)
+        limitsCell = limitsAvailable(at: now)
         // The screen with the menu bar.
         guard !hidden, let screen = NSScreen.screens.first else {
             panel.orderOut(nil)
@@ -63,7 +77,7 @@ final class StripController {
             hovered = nil // no mouseExited arrives for a window taken off screen
             return
         }
-        layout = StripLayout.fitting(count: shown.count + 1, height: screen.visibleFrame.height)
+        layout = StripLayout.fitting(count: shown.count + (limitsCell ? 1 : 0) + 1, height: screen.visibleFrame.height)
         let frame = layout.frame(in: screen.visibleFrame, edge: edge)
         if panel.frame != frame { panel.setFrame(frame, display: false) }
         view.arrange(layout, edge: edge, collapsed: collapsed)
@@ -76,15 +90,22 @@ final class StripController {
         let now = Date()
         let current = link.list.shown(at: now)
         // A finished session that dozes off leaves the strip, which then needs a new layout.
-        guard current.map(\.id) == shown.map(\.id) else { return relayout() }
+        guard current.map(\.id) == shown.map(\.id), limitsAvailable(at: now) == limitsCell else { return relayout() }
         shown = current
 
         let frame = Int(now.timeIntervalSinceReferenceDate * Self.framesPerSecond)
         if !collapsed {
             let focusedId = link.list.focusedId
-            view.show(shown.map {
+            var appearances = shown.map {
                 CreatureAppearance(session: $0, focused: $0.id == focusedId, hovered: hovered == .session($0.id), frame: frame, now: now)
-            } + [CreatureAppearance.addButton(hovered: hovered == .add)])
+            }
+            if limitsCell {
+                // Empty bars until Claude Code reports the limits, so the cell is there from the start.
+                var meters = link.list.limits?.meters(at: now) ?? []
+                if meters.isEmpty { meters = [LimitMeter(label: "5h", usedPct: 0), LimitMeter(label: "7d", usedPct: 0)] }
+                appearances.append(CreatureAppearance.limits(meters, hovered: hovered == .limits, stale: link.list.limits?.isStale(at: now) ?? false))
+            }
+            view.show(appearances + [CreatureAppearance.addButton(hovered: hovered == .add)])
         }
         view.showTab(CreatureAppearance.tab(for: shown, collapsed: collapsed, edge: edge, hovered: hovered == .tab, frame: frame, now: now))
 
@@ -96,31 +117,52 @@ final class StripController {
         label.show(content)
     }
 
+    private func limitsAvailable(at now: Date) -> Bool {
+        showLimits
+    }
+
+    /// The cell after the last session, when there is one.
+    private var limitsIndex: Int? { limitsCell ? shown.count : nil }
+    private var addIndex: Int { shown.count + (limitsCell ? 1 : 0) }
+
     private func labelContent(for cell: Cell, failure: String?, now: Date) -> HoverLabel.Content? {
         let failed = NSColor(paint: .danger)
         let strip = layout.stripRect(in: panel.frame, edge: edge)
-        func content(_ name: String, _ status: String, _ color: NSColor, beside: CGRect, outside: CGRect? = nil) -> HoverLabel.Content {
-            HoverLabel.Content(name: name, status: status, statusColor: color, frameBeside: beside, outside: outside ?? panel.frame, edge: edge)
+        func content(_ name: String, _ status: String, _ color: NSColor, beside: CGRect, outside: CGRect? = nil, detail: String? = nil) -> HoverLabel.Content {
+            HoverLabel.Content(name: name, status: status, statusColor: color, frameBeside: beside, outside: outside ?? panel.frame, edge: edge, detail: detail)
         }
         switch cell {
         case .session(let id):
             guard let index = shown.firstIndex(where: { $0.id == id }) else { return nil }
             let session = shown[index]
             let color = failure != nil ? failed : session.needsAttention ? NSColor(paint: .accent) : Style.muted
-            return content(session.name, failure ?? session.statusLine(at: now), color, beside: layout.cellFrame(index, in: strip))
+            return content(session.name, failure ?? session.statusLine(at: now), color, beside: layout.cellFrame(index, in: strip), detail: session.usage?.line)
+        case .limits:
+            guard let index = limitsIndex else { return nil }
+            let focused = link.list.focusedId.flatMap { link.list.sessions[$0] }
+            let lines = LimitsReport.lines(limits: link.list.limits, session: focused?.usage, spend: link.list.spend, at: now)
+            let level = link.list.limits?.meters(at: now).map(\.level)
+            let stale = link.list.limits?.isStale(at: now) ?? false
+            let color = stale ? Style.muted : level?.contains(.hot) == true ? failed : level?.contains(.warm) == true ? NSColor(paint: .accent) : Style.text
+            let rest = lines.dropFirst().joined(separator: "\n")
+            if lines.isEmpty {
+                return content("Claude usage", "no data yet", Style.muted, beside: layout.cellFrame(index, in: strip), detail: "send a message in a new Claude Code session")
+            }
+            return content("Claude usage", lines[0], color, beside: layout.cellFrame(index, in: strip), detail: rest.isEmpty ? nil : rest)
         case .add:
             let status = failure ?? "pin any session from the Claude app"
-            return content("Add a session", status, failure != nil ? failed : Style.muted, beside: layout.cellFrame(shown.count, in: strip))
+            return content("Add a session", status, failure != nil ? failed : Style.muted, beside: layout.cellFrame(addIndex, in: strip))
         case .tab:
             let tab = layout.tabRect(in: panel.frame, edge: edge, collapsed: collapsed)
             let color = shown.contains(where: \.needsAttention) ? NSColor(paint: .accent) : Style.muted
-            return content(collapsed ? "Expand" : "Collapse", summary(of: shown), color, beside: tab, outside: collapsed ? tab : nil)
+            return content(collapsed ? "Expand" : "Collapse", summary(of: shown), color, beside: tab, outside: collapsed ? tab : nil, detail: link.list.limits?.line(at: now))
         }
     }
 
     private func cell(at index: Int) -> Cell? {
         if shown.indices.contains(index) { return .session(shown[index].id) }
-        return index == shown.count ? .add : nil
+        if index == limitsIndex { return .limits }
+        return index == addIndex ? .add : nil
     }
 
     private func startClock() {
@@ -172,6 +214,8 @@ final class StripController {
                     MainActor.assumeIsolated { self?.showLibrary(entries) }
                 }
             }
+        case .limits?:
+            if let url = URL(string: "https://claude.ai/settings/usage") { NSWorkspace.shared.open(url) }
         case .tab?, nil:
             break
         }
@@ -187,7 +231,7 @@ final class StripController {
 
     private func showLibrary(_ entries: [LibraryEntry]) {
         let menu = LibraryMenu.make(entries, now: Date()) { [link] message in link.send(message) }
-        view.popUp(menu, atCell: shown.count)
+        view.popUp(menu, atCell: addIndex)
     }
 }
 

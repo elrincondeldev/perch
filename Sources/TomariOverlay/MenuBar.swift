@@ -28,9 +28,17 @@ final class MenuBar: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         menu.addItem(withTitle: statusText, action: nil, keyEquivalent: "")
+        let now = Date()
+        if let limits = link.list.limits?.live(at: now) {
+            for (label, window) in [("5h", limits.fiveHour), ("7d", limits.sevenDay)] {
+                if let window { menu.addItem(withTitle: window.line(label, at: now), action: nil, keyEquivalent: "") }
+            }
+        }
+        if let line = link.list.spend?.line(at: now) { menu.addItem(withTitle: line, action: nil, keyEquivalent: "") }
         menu.addItem(.separator())
 
         menu.addItem(entry(strip.hidden ? "Show Strip" : "Hide Strip", #selector(toggleStrip)))
+        menu.addItem(entry(strip.showLimits ? "Hide Limits" : "Show Limits", #selector(toggleLimits)))
         let edges = NSMenu()
         for edge in ScreenEdge.allCases {
             let choice = entry(edge.rawValue.capitalized, #selector(chooseEdge(_:)))
@@ -65,6 +73,10 @@ final class MenuBar: NSObject, NSMenuDelegate {
 
     @objc private func toggleStrip() {
         strip.hidden.toggle()
+    }
+
+    @objc private func toggleLimits() {
+        strip.showLimits.toggle()
     }
 
     @objc private func chooseEdge(_ sender: NSMenuItem) {

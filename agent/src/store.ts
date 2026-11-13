@@ -4,7 +4,7 @@
  */
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import { DEFAULT_ICON, type SessionIcon, type SessionState } from "../../shared/protocol.ts";
+import { DEFAULT_ICON, type AccountLimits, type SessionIcon, type SessionState } from "../../shared/protocol.ts";
 import type { SessionRecord } from "./state.ts";
 
 export interface Pin {
@@ -32,6 +32,13 @@ interface PinRow {
   color: string;
 }
 
+/** Local calendar date of an epoch-ms time, YYYY-MM-DD. */
+export function localDay(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export class Store {
   private db: Database;
 
@@ -57,6 +64,19 @@ export class Store {
         character  TEXT NOT NULL,
         color      TEXT NOT NULL,
         created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS last_limits (
+        id   INTEGER PRIMARY KEY CHECK (id = 1),
+        json TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS spend_days (
+        day TEXT PRIMARY KEY,
+        usd REAL NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS spend_sessions (
+        session_id TEXT PRIMARY KEY,
+        last_cost  REAL NOT NULL,
+        updated_at INTEGER NOT NULL
       );
     `);
   }
@@ -150,6 +170,57 @@ export class Store {
     } finally {
       this.db.exec("DETACH DATABASE source");
     }
+  }
+
+  /**
+   * Adds what `sessionId` cost since its last reading to `day`'s total and returns that total.
+   * A cost below the last one means the session started over, so the whole of it is new.
+   * Only the last cost per session is kept, so a restart of the agent doesn't count a session twice.
+   */
+  recordCost(sessionId: string, day: string, cost: number, now: number): number {
+    return this.db.transaction(() => {
+      const last = this.db.query<{ last_cost: number }, [string]>("SELECT last_cost FROM spend_sessions WHERE session_id = ?").get(sessionId);
+      const delta = last === null ? cost : cost >= last.last_cost ? cost - last.last_cost : cost;
+      this.db
+        .query(
+          `INSERT INTO spend_sessions (session_id, last_cost, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT(session_id) DO UPDATE SET last_cost = excluded.last_cost, updated_at = excluded.updated_at`,
+        )
+        .run(sessionId, cost, now);
+      if (delta > 0) {
+        this.db
+          .query("INSERT INTO spend_days (day, usd) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET usd = usd + excluded.usd")
+          .run(day, delta);
+      }
+      return this.spendOn(day);
+    })();
+  }
+
+  /** The account limits as last reported, so a restart still has something to show until Claude Code reports again. */
+  saveLimits(limits: AccountLimits) {
+    this.db
+      .query("INSERT INTO last_limits (id, json) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json")
+      .run(JSON.stringify(limits));
+  }
+
+  loadLimits(): AccountLimits | null {
+    const row = this.db.query<{ json: string }, []>("SELECT json FROM last_limits WHERE id = 1").get();
+    if (!row) return null;
+    try {
+      return JSON.parse(row.json) as AccountLimits;
+    } catch {
+      return null;
+    }
+  }
+
+  spendOn(day: string): number {
+    return this.db.query<{ usd: number }, [string]>("SELECT usd FROM spend_days WHERE day = ?").get(day)?.usd ?? 0;
+  }
+
+  /** Drops spend records older than `maxAgeMs`. */
+  pruneSpend(now: number, maxAgeMs: number) {
+    this.db.query("DELETE FROM spend_sessions WHERE updated_at < ?").run(now - maxAgeMs);
+    this.db.query("DELETE FROM spend_days WHERE day < ?").run(localDay(now - maxAgeMs));
   }
 
   close() {

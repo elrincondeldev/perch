@@ -2,6 +2,7 @@ import { PANEL_PORT } from "../../shared/protocol.ts";
 import { HOOK_PORT, loadConfig, panelUrls } from "./config.ts";
 import { watchDesktopFocus } from "./desktop-focus.ts";
 import { SessionHub } from "./hub.ts";
+import { startOauthUsage } from "./oauth-usage.ts";
 import { startPoller } from "./poller.ts";
 import { startServers } from "./server.ts";
 import { Store } from "./store.ts";
@@ -19,12 +20,18 @@ export async function runAgent({ lan }: { lan: boolean }) {
     panelHost: lan ? "0.0.0.0" : "127.0.0.1",
   });
   const stopPoller = startPoller(hub);
+  const stopOauthUsage = startOauthUsage(hub);
   const stopFocus = watchDesktopFocus((id) => hub.setFocused(id));
   const pruneTimer = setInterval(() => hub.prune(), 10 * 60 * 1000);
 
   hub.subscribe((change) => {
     const time = new Date().toLocaleTimeString("en-GB", { hour12: false });
     if (change.type === "removed") return console.log(`${time}  ${change.id.slice(0, 8)}  removed`);
+    if (change.type === "limits") {
+      const { fiveHour, sevenDay } = change.limits;
+      return console.log(`${time}  limits → 5h ${fiveHour?.usedPct ?? "?"}%  7d ${sevenDay?.usedPct ?? "?"}%`);
+    }
+    if (change.type === "spend") return console.log(`${time}  spend → $${change.spend.usd.toFixed(2)} on ${change.spend.day}`);
     if (change.type === "focus") return console.log(`${time}  focus → ${change.id ? hub.get(change.id)?.name ?? change.id : "none"}`);
     const s = change.session;
     const flags = `${s.live ? "" : " (not live)"}${s.pinned ? " ★" : ""}`;
@@ -41,6 +48,7 @@ export async function runAgent({ lan }: { lan: boolean }) {
   function shutdown() {
     clearInterval(pruneTimer);
     stopPoller();
+    stopOauthUsage();
     stopFocus();
     servers.stop();
     store.close();

@@ -38,6 +38,79 @@ public struct SessionIcon: Equatable, Sendable, Decodable {
     ]
 }
 
+/// What Claude Code's statusline reported for one session; each field is nil until a reading has it.
+public struct SessionUsage: Equatable, Sendable, Decodable {
+    public var costUsd: Double?
+    /// Share of the context window in use, 0-100.
+    public var contextPct: Double?
+    public var inputTokens: Double?
+    public var outputTokens: Double?
+
+    public init(costUsd: Double? = nil, contextPct: Double? = nil, inputTokens: Double? = nil, outputTokens: Double? = nil) {
+        self.costUsd = costUsd
+        self.contextPct = contextPct
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+    }
+}
+
+/// One rate-limit window of the account (Claude Pro/Max only).
+public struct LimitWindow: Equatable, Sendable, Decodable {
+    /// 0-100
+    public var usedPct: Double
+    public var resetsAt: Date
+
+    public init(usedPct: Double, resetsAt: Date) {
+        self.usedPct = usedPct
+        self.resetsAt = resetsAt
+    }
+
+    private enum Keys: String, CodingKey { case usedPct, resetsAt }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        let resetsAtEpochMs = try c.decode(Double.self, forKey: .resetsAt)
+        self.init(usedPct: try c.decode(Double.self, forKey: .usedPct), resetsAt: Date(timeIntervalSince1970: resetsAtEpochMs / 1000))
+    }
+}
+
+/// What every session together has cost on one local calendar day.
+public struct DailySpend: Equatable, Sendable, Decodable {
+    /// Local date, YYYY-MM-DD.
+    public var day: String
+    public var usd: Double
+
+    public init(day: String, usd: Double) {
+        self.day = day
+        self.usd = usd
+    }
+}
+
+/// The account's limits, shared by every session. A window is nil while Claude Code doesn't report it.
+public struct AccountLimits: Equatable, Sendable, Decodable {
+    public var fiveHour: LimitWindow?
+    public var sevenDay: LimitWindow?
+    public var updatedAt: Date
+
+    public init(fiveHour: LimitWindow?, sevenDay: LimitWindow?, updatedAt: Date) {
+        self.fiveHour = fiveHour
+        self.sevenDay = sevenDay
+        self.updatedAt = updatedAt
+    }
+
+    private enum Keys: String, CodingKey { case fiveHour, sevenDay, updatedAt }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        let updatedAtEpochMs = try c.decode(Double.self, forKey: .updatedAt)
+        self.init(
+            fiveHour: try c.decodeIfPresent(LimitWindow.self, forKey: .fiveHour),
+            sevenDay: try c.decodeIfPresent(LimitWindow.self, forKey: .sevenDay),
+            updatedAt: Date(timeIntervalSince1970: updatedAtEpochMs / 1000)
+        )
+    }
+}
+
 public struct PanelSession: Equatable, Identifiable, Sendable {
     public var id: String
     public var name: String
@@ -50,10 +123,12 @@ public struct PanelSession: Equatable, Identifiable, Sendable {
     public var pinned: Bool
     public var position: Int?
     public var icon: SessionIcon
+    /// Nil until the statusline has reported, and from agents that predate it.
+    public var usage: SessionUsage?
 
     public init(
         id: String, name: String, cwd: String, state: SessionState, activity: String?, live: Bool,
-        stateSince: Date, pinned: Bool, position: Int?, icon: SessionIcon
+        stateSince: Date, pinned: Bool, position: Int?, icon: SessionIcon, usage: SessionUsage? = nil
     ) {
         self.id = id
         self.name = name
@@ -65,12 +140,13 @@ public struct PanelSession: Equatable, Identifiable, Sendable {
         self.pinned = pinned
         self.position = position
         self.icon = icon
+        self.usage = usage
     }
 }
 
 extension PanelSession: Decodable {
     private enum Keys: String, CodingKey {
-        case id, name, cwd, state, activity, live, stateSince, pinned, position, icon
+        case id, name, cwd, state, activity, live, stateSince, pinned, position, icon, usage
     }
 
     public init(from decoder: Decoder) throws {
@@ -86,7 +162,9 @@ extension PanelSession: Decodable {
             stateSince: Date(timeIntervalSince1970: stateSinceEpochMs / 1000),
             pinned: try c.decode(Bool.self, forKey: .pinned),
             position: try c.decodeIfPresent(Int.self, forKey: .position),
-            icon: try c.decode(SessionIcon.self, forKey: .icon)
+            icon: try c.decode(SessionIcon.self, forKey: .icon),
+            // A usage block this build can't read costs the tile its numbers, not the session.
+            usage: try? c.decodeIfPresent(SessionUsage.self, forKey: .usage)
         )
     }
 }
@@ -131,6 +209,10 @@ public enum ServerMessage: Equatable, Sendable {
     case error(message: String)
     /// Reply to a library request, most recent first.
     case library([LibraryEntry])
+    /// The account's rate limits, sent after the snapshot once known and on every change.
+    case limits(AccountLimits)
+    /// What all sessions have cost today, sent once above zero and on every change.
+    case spend(DailySpend)
 
     /// Nil for malformed or unknown messages.
     public static func parse(_ text: String) -> ServerMessage? {
@@ -151,6 +233,10 @@ public enum ServerMessage: Equatable, Sendable {
             return (try? decoder.decode(Failure.self, from: data)).map { .error(message: $0.message) }
         case "library":
             return (try? decoder.decode(Library.self, from: data)).map { .library($0.sessions.compactMap(\.value)) }
+        case "limits":
+            return (try? decoder.decode(LimitsChange.self, from: data)).map { .limits($0.limits) }
+        case "spend":
+            return (try? decoder.decode(SpendChange.self, from: data)).map { .spend($0.spend) }
         default:
             return nil
         }
@@ -163,6 +249,8 @@ public enum ServerMessage: Equatable, Sendable {
     private struct Focus: Decodable { let id: String? }
     private struct Failure: Decodable { let message: String }
     private struct Library: Decodable { let sessions: [Lenient<LibraryEntry>] }
+    private struct LimitsChange: Decodable { let limits: AccountLimits }
+    private struct SpendChange: Decodable { let spend: DailySpend }
 }
 
 /// Lets one unreadable session be skipped instead of failing the whole snapshot.

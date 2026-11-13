@@ -42,7 +42,7 @@ public struct CreatureAppearance: Equatable, Sendable {
     public let tile: Tile
     public let opacity: Double
 
-    private init(pixels: Pixels, tile: Tile, opacity: Double) {
+    init(pixels: Pixels, tile: Tile, opacity: Double) {
         self.pixels = pixels
         self.tile = tile
         self.opacity = opacity
