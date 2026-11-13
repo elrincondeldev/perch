@@ -28,9 +28,27 @@ That's all: the strip appears on the right edge with a **+** to pin your session
 npx tomari status             # what's installed and running
 npx tomari uninstall          # remove everything; asks before deleting pins and icons
 npx tomari setup --pi         # also let a claude-panel Raspberry Pi connect over your network
+npx tomari host ghostty       # open sessions in Ghostty terminals instead of the desktop app
 ```
 
-You need the Claude desktop app (sessions in its Code tab), the Claude Code CLI 2.1.285 or newer, and Node.js 18 or newer for `npx`.
+You need the Claude Code CLI 2.1.285 or newer, Node.js 18 or newer for `npx`, and either the Claude desktop app (sessions in its Code tab) or [Ghostty](https://ghostty.org) 1.4 or newer.
+
+## Desktop app or terminal
+
+Tomari opens your sessions in one **host**: the Claude desktop app, which is the default, or Ghostty terminals.
+
+| | Claude app (`app`) | Ghostty (`ghostty`) |
+|---|---|---|
+| **Click a creature** | Opens the session in the app, even one the app has stopped. A session still running in a terminal is brought to the front in Ghostty instead. | Brings the session's Ghostty panel to the front, found by the tty of its Claude process or of a program around it, such as nvim's terminal. It never starts or resumes a session. |
+| **Session in front** | The one the app has focused. | The focused panel of the front window's selected tab. |
+| **The + menu** | Every session in the app, running or stopped. | The sessions running now. |
+| **Two sessions with one name** | Two sessions: the app keeps each session's id. | One session: `claude -n composer` gets a new id every time it is reopened, so the new one replaces the closed one and keeps its pin and icon. |
+
+Choose the host with `tomari host app` or `tomari host ghostty`, with `tomari setup --host`, or in the menu bar under **Open Sessions In**. A running agent switches at once, without a restart, and remembers the choice. Switching moves no session: the ones already running stay where they are.
+
+To keep background sessions and other projects off the strip with Ghostty, add a `"workspace": "~/some/folder"` to `~/Library/Application Support/tomari/config.json`: only sessions in that folder or below are tracked.
+
+Pins and icons belong to a session's name, so a named session keeps them however often it is reopened. Sessions that share a name share them.
 
 ## Features
 
@@ -38,10 +56,10 @@ You need the Claude desktop app (sessions in its Code tab), the Claude Code CLI 
 - **One creature per session**, animated by its state: working, needs permission, asking you, compacting, done, error or closed. Finished sessions fall asleep after five minutes.
 - **Hard to miss when it needs you**: a permission request blinks the creature's tile in orange; a question rings it in orange. A working creature hops with typing dots over its head, and one that finished its turn holds up a green check, ringed in green, until you reply or it falls asleep.
 - **Hover** for the session's name and status, e.g. `Bash: npm test` or `done · 5m`.
-- **Click** to open the session in the Claude desktop app, even one the app has stopped. The session in front is ringed in white.
+- **Click** to open the session in the Claude desktop app, even one the app has stopped, or to bring its Ghostty panel to the front. The session in front is ringed in white.
 - **Right-click** (or control-click) to pin or unpin the session and pick its character and color.
 - **Stays out of the way**: the strip floats over every Space and full-screen app and never takes focus from the app you're using. The arrow tab beside it slides the strip off the edge, leaving just the tab, which blinks orange when a session needs you; click it again to bring the strip back.
-- **Menu bar item** to show or hide the strip, move it to the left or right edge, and see how many sessions are waiting for you. Quit Tomari there; it starts again at your next login.
+- **Menu bar item** to show or hide the strip, move it to the left or right edge, choose where sessions open, and see how many sessions are waiting for you. Quit Tomari there; it starts again at your next login.
 
 ## How it works
 
@@ -50,7 +68,7 @@ Claude Code ─ hooks ─▶ tomari agent ◀─ WebSocket (127.0.0.1:7778, toke
 claude agents ─ poll ─▶  └ SQLite: pins, icons                       └ claude-panel Pi (with --pi)
 ```
 
-- **`tomari`** (`agent/`, Bun and TypeScript compiled into one binary) holds the CLI and the agent. The agent tracks every session's state from Claude Code hooks and `claude agents --json`, keeps pins and icons in SQLite, and opens sessions in the desktop app. It listens on 127.0.0.1 only, unless you set it up with `--pi`.
+- **`tomari`** (`agent/`, Bun and TypeScript compiled into one binary) holds the CLI and the agent. The agent tracks every session's state from Claude Code hooks and `claude agents --json`, keeps pins and icons in SQLite, and opens sessions in the host: the desktop app or Ghostty. Everything that differs between hosts sits behind `SessionHost` in [`agent/src/host.ts`](agent/src/host.ts), so another terminal is one more implementation of it. It listens on 127.0.0.1 only, unless you set it up with `--pi`.
 - **`tomari-overlay`** (`Sources/`, Swift) is a native AppKit and Core Animation app that runs as an accessory: no Dock icon, just the strip and a menu bar item. It costs about 0.5 % of one CPU core and 13 MB of memory while it animates.
 - **`shared/protocol.ts`** is the contract between them, and the Pi panel speaks it too.
 
@@ -62,6 +80,7 @@ claude agents ─ poll ─▶  └ SQLite: pins, icons                       └
 | `claude://code/continue?session=local_…` | Opening any desktop-app session, running or stopped | No |
 | `~/Library/Application Support/Claude/claude-code-sessions/` | The app's sessions, and their `local_…` ids | No |
 | `setFocusedSession` in `~/Library/Logs/Claude/main.log` | Which session is in front | No |
+| Ghostty's AppleScript dictionary (windows, tabs, terminals and their `tty`) | Finding, focusing and following a session's panel | Yes |
 
 If a Claude update breaks an undocumented source, only the feature it feeds stops working.
 

@@ -6,9 +6,20 @@ func sessionListTests() {
         var list = SessionList()
         list.apply(.session(session(name: "stale")))
         let fresh = session(name: "fresh")
-        list.apply(.snapshot(sessions: [fresh], focusedId: fresh.id))
+        list.apply(.snapshot(sessions: [fresh], focusedId: fresh.id, host: nil))
         expectEqual(list.shown(at: now).map(\.name), ["fresh"])
         expectEqual(list.focusedId, fresh.id)
+    }
+
+    test("the host comes with the snapshot and follows host changes") {
+        var list = SessionList()
+        expectEqual(list.host, nil)
+        list.apply(.snapshot(sessions: [], focusedId: nil, host: .ghostty))
+        expectEqual(list.host, .ghostty)
+        list.apply(.host(.desktop))
+        expectEqual(list.host, .desktop)
+        list.apply(.snapshot(sessions: [], focusedId: nil, host: nil)) // an older agent: nothing to check in the menu
+        expectEqual(list.host, nil)
     }
 
     test("session upserts, removed deletes, focus moves") {
@@ -45,14 +56,14 @@ func sessionListTests() {
             session(name: "finished long ago", state: .done, stateSince: now - 3600),
             session(name: "gone", state: .ended, live: false),
             session(name: "pinned first", state: .ended, live: false, pinned: true, position: 0),
-        ], focusedId: nil))
+        ], focusedId: nil, host: nil))
         expectEqual(list.shown(at: now).map(\.name), ["pinned first", "pinned second", "alpha", "zeta"])
     }
 
     test("sessions with the same name keep a stable order") {
         var list = SessionList()
         let twins = [session(name: "twin"), session(name: "twin")]
-        list.apply(.snapshot(sessions: twins.reversed(), focusedId: nil))
+        list.apply(.snapshot(sessions: twins.reversed(), focusedId: nil, host: nil))
         expectEqual(list.shown(at: now).map(\.id), twins.map(\.id))
     }
 }

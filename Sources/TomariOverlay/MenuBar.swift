@@ -42,6 +42,22 @@ final class MenuBar: NSObject, NSMenuDelegate {
         edgeItem.submenu = edges
         menu.addItem(edgeItem)
 
+        // An agent that predates hosts reports none, and wouldn't understand the choice.
+        if let current = link.list.host {
+            let hosts = NSMenu()
+            for host in SessionHost.allCases {
+                let choice = entry(host.title, #selector(chooseHost(_:)))
+                choice.representedObject = host.rawValue
+                choice.state = host == current ? .on : .off
+                hosts.addItem(choice)
+            }
+            hosts.addItem(.separator())
+            hosts.addItem(withTitle: SessionHost.switchNote, action: nil, keyEquivalent: "")
+            let hostItem = NSMenuItem(title: "Open Sessions In", action: nil, keyEquivalent: "")
+            hostItem.submenu = hosts
+            menu.addItem(hostItem)
+        }
+
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Tomari", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
@@ -69,6 +85,10 @@ final class MenuBar: NSObject, NSMenuDelegate {
 
     @objc private func chooseEdge(_ sender: NSMenuItem) {
         if let edge = (sender.representedObject as? String).flatMap(ScreenEdge.init(rawValue:)) { strip.edge = edge }
+    }
+
+    @objc private func chooseHost(_ sender: NSMenuItem) {
+        if let host = (sender.representedObject as? String).flatMap(SessionHost.init(rawValue:)) { link.send(.host(host)) }
     }
 
     private static func icon() -> NSImage {

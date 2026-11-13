@@ -1,9 +1,9 @@
 import { $ } from "bun";
-import type { PanelConfig } from "../../shared/protocol.ts";
+import type { PanelConfig, SessionHostId } from "../../shared/protocol.ts";
 import { existsSync } from "node:fs";
 import { chmod, copyFile, mkdir, rename, rm } from "node:fs/promises";
 import { dirname } from "node:path";
-import { BIN_DIR, CLAUDE_PANEL_CONFIG, CLAUDE_PANEL_DB, CLAUDE_SETTINGS, CONFIG_FILE, DATA_DIR, DB_FILE, LOG_DIR, loadConfig, OVERLAY_DEFAULTS, panelUrls, PERCH } from "./config.ts";
+import { BIN_DIR, CLAUDE_PANEL_CONFIG, CLAUDE_PANEL_DB, CLAUDE_SETTINGS, CONFIG_FILE, DATA_DIR, DB_FILE, LOG_DIR, loadConfig, OVERLAY_DEFAULTS, panelUrls, PERCH, saveHost } from "./config.ts";
 import { isLoaded, LEGACY_AGENT_LABEL, PERCH_LABELS, tomariJobs, plistPath, remove, start, stop } from "./launchd.ts";
 import { writeHooks } from "./settings.ts";
 import { Store } from "./store.ts";
@@ -11,7 +11,8 @@ import { Store } from "./store.ts";
 /** What a release ships next to the `tomari` binary, and setup copies into BIN_DIR. */
 const SHIPPED = ["tomari", "tomari-overlay", "Tomari_TomariCore.bundle"];
 
-export async function setup({ pi }: { pi: boolean }) {
+/** `host` chooses where sessions are opened; null keeps the one already saved. */
+export async function setup({ pi, host }: { pi: boolean; host: SessionHostId | null }) {
   const source = dirname(process.execPath);
   const missing = SHIPPED.filter((name) => !existsSync(`${source}/${name}`));
   if (missing.length > 0) {
@@ -31,6 +32,7 @@ export async function setup({ pi }: { pi: boolean }) {
     await copyFile(CLAUDE_PANEL_CONFIG, CONFIG_FILE);
     await chmod(CONFIG_FILE, 0o600);
   }
+  if (host) await saveHost(host);
   const config = await loadConfig();
   const store = new Store(config.dbPath);
   const imported = store.importPinsFrom(CLAUDE_PANEL_DB);
@@ -44,6 +46,7 @@ export async function setup({ pi }: { pi: boolean }) {
   binaries : ${BIN_DIR}
   data     : ${DATA_DIR}
   logs     : ${LOG_DIR}
+  host     : ${config.host === "desktop" ? "the Claude desktop app" : "Ghostty"} (change it with \`tomari host\`)
   hooks    : ${hooksChanged ? "added to" : "already in"} ${CLAUDE_SETTINGS}`);
   if (migratedPerch) console.log("  moved your Perch install, with its pins, icons and token, into Tomari");
   if (replacedClaudePanel) console.log("  replaced claude-panel's agent (com.claude-panel.agent)");

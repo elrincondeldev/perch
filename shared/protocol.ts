@@ -15,6 +15,11 @@ export interface PanelConfig {
   token: string;
 }
 
+/** Where sessions run and are opened: the Claude desktop app, or Ghostty terminals. */
+export const SESSION_HOSTS = ["desktop", "ghostty"] as const;
+
+export type SessionHostId = (typeof SESSION_HOSTS)[number];
+
 export const SESSION_STATES = [
   "idle", // started, no prompt yet
   "working",
@@ -54,7 +59,7 @@ export interface PanelSession {
   icon: SessionIcon;
 }
 
-/** A desktop-app session the panel can pin, running or not. */
+/** A session the panel can pin: in the desktop app, running or not; in a terminal, a running one. */
 export interface LibraryEntry {
   id: string;
   name: string;
@@ -65,10 +70,11 @@ export interface LibraryEntry {
 }
 
 export type ServerMessage =
-  | { type: "snapshot"; sessions: PanelSession[]; focusedId: string | null }
+  | { type: "snapshot"; sessions: PanelSession[]; focusedId: string | null; host: SessionHostId }
   | { type: "session"; session: PanelSession }
   | { type: "removed"; id: string }
-  | { type: "focus"; id: string | null } // the session in front in the desktop app; null when none
+  | { type: "focus"; id: string | null } // the session in front in the host; null when none
+  | { type: "host"; host: SessionHostId } // the host changed, or the reply to a host request
   | { type: "library"; sessions: LibraryEntry[] } // reply to a library request, most recent first
   | { type: "error"; message: string };
 
@@ -77,4 +83,5 @@ export type ClientMessage =
   | { type: "open"; id: string }
   | { type: "pin"; id: string; pinned: boolean }
   | { type: "icon"; id: string; icon: SessionIcon } // pins the session if it isn't yet
-  | { type: "library" };
+  | { type: "library" }
+  | { type: "host"; host: SessionHostId }; // switches where sessions are opened; the agent saves it
