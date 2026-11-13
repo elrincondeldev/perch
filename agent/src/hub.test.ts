@@ -215,6 +215,23 @@ describe("SessionHub statusline readings", () => {
     expect(hub.currentSpend()!.usd).toBeCloseTo(2);
   });
 
+  test("the last known limits survive a restart, until they reset", () => {
+    const path = `${tmpdir()}/tomari-limits-${Date.now()}.db`;
+    try {
+      const first = setup(new Store(path));
+      first.hub.handleStatusline(reading(A));
+      first.store.close();
+
+      const second = setup(new Store(path));
+      expect(second.hub.currentLimits()!.fiveHour!.usedPct).toBe(40);
+      second.tick(10_000_000);
+      expect(second.hub.currentLimits()).toBeNull();
+      second.store.close();
+    } finally {
+      for (const ext of ["", "-wal", "-shm"]) rmSync(path + ext, { force: true });
+    }
+  });
+
   test("spend survives a restart of the agent without counting a session twice", () => {
     const path = `${tmpdir()}/tomari-spend-${Date.now()}.db`;
     try {

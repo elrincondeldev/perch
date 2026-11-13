@@ -35,6 +35,7 @@ export class SessionHub {
   ) {
     for (const rec of store.loadSessions()) this.records.set(rec.id, rec);
     this.pins = store.loadPins();
+    this.limits = store.loadLimits();
   }
 
   subscribe(listener: HubListener): () => void {
@@ -93,10 +94,15 @@ export class SessionHub {
       const usd = this.store.recordCost(sessionId, day, usage.costUsd, this.now());
       if (usd !== before) this.emit({ type: "spend", spend: { day, usd } });
     }
-    if (limits && !sameLimits(this.limits, limits)) {
-      this.limits = limits;
-      this.emit({ type: "limits", limits });
-    }
+    if (limits) this.setLimits(limits);
+  }
+
+  /** Records account limits from any source; announced only when they differ from what is known. */
+  setLimits(limits: AccountLimits) {
+    if (sameLimits(this.limits, limits)) return;
+    this.limits = limits;
+    this.store.saveLimits(limits);
+    this.emit({ type: "limits", limits });
   }
 
   /** Starts tracking a session that is not running, e.g. a desktop session about to be pinned. No-op if known. */

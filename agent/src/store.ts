@@ -4,7 +4,7 @@
  */
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import { DEFAULT_ICON, type SessionIcon, type SessionState } from "../../shared/protocol.ts";
+import { DEFAULT_ICON, type AccountLimits, type SessionIcon, type SessionState } from "../../shared/protocol.ts";
 import type { SessionRecord } from "./state.ts";
 
 export interface Pin {
@@ -64,6 +64,10 @@ export class Store {
         character  TEXT NOT NULL,
         color      TEXT NOT NULL,
         created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS last_limits (
+        id   INTEGER PRIMARY KEY CHECK (id = 1),
+        json TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS spend_days (
         day TEXT PRIMARY KEY,
@@ -190,6 +194,23 @@ export class Store {
       }
       return this.spendOn(day);
     })();
+  }
+
+  /** The account limits as last reported, so a restart still has something to show until Claude Code reports again. */
+  saveLimits(limits: AccountLimits) {
+    this.db
+      .query("INSERT INTO last_limits (id, json) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json")
+      .run(JSON.stringify(limits));
+  }
+
+  loadLimits(): AccountLimits | null {
+    const row = this.db.query<{ json: string }, []>("SELECT json FROM last_limits WHERE id = 1").get();
+    if (!row) return null;
+    try {
+      return JSON.parse(row.json) as AccountLimits;
+    } catch {
+      return null;
+    }
   }
 
   spendOn(day: string): number {
