@@ -16,16 +16,31 @@ func spriteTests() {
     }
 
     test("loads the shared character templates, default first") {
-        expectEqual(CharacterTemplate.all.map(\.id), ["default", "robot", "ghost", "cat"])
+        expectEqual(CharacterTemplate.all.map(\.id), ["default", "robot", "ghost", "cat", "owl", "frog", "crab", "pou"])
+    }
+
+    test("W cells are white whatever the session's color") {
+        let white = RGB(hex: "#ffffff")!
+        for color in [orange, blue] {
+            let pixels = spriteFrame(character: "pou", color: color, mood: .idle, frame: 1)
+            expect(pixels.joined().contains(white), "pou's eyes are white on \(color)")
+        }
     }
 
     for c in CharacterTemplate.all {
         test("\(c.id) is a well-formed 16×16 template") {
             expectEqual(c.body.count, 16)
             for row in c.body + (c.walk?.rows ?? []) {
-                expect(row.count == 16 && row.allSatisfy { "BDLFP.".contains($0) }, "bad row \(row)")
+                expect(row.count == 16 && row.allSatisfy { "BDLFPW.".contains($0) }, "bad row \(row)")
             }
             if let walk = c.walk { expect(walk.row + walk.rows.count <= 16, "walk runs past the body") }
+        }
+
+        test("\(c.id) leaves the top right free for the sleeping z") {
+            // The first z covers sprite x 15…18, y 5…8: body columns 11…14 of rows 0…2.
+            for row in c.body[0...2] {
+                expect(Array(row)[11...14].allSatisfy { $0 == "." }, "\(c.id) reaches under the z in \(row)")
+            }
         }
 
         test("\(c.id) has both eyes on its body") {

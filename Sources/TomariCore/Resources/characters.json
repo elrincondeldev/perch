@@ -94,5 +94,101 @@
       "................"
     ],
     "eyes": { "y": 7, "left": 5, "right": 9 }
+  },
+  {
+    "id": "owl",
+    "label": "Owl",
+    "body": [
+      "................",
+      "................",
+      "................",
+      "...B........B...",
+      "...BB......BB...",
+      "...BBBBBBBBBB...",
+      "..BBLLBBBBLLBB..",
+      "..BLLLLBBLLLLB..",
+      "..BLLLLDDLLLLB..",
+      "..BBLLBDDBLLBB..",
+      "..BBBBBBBBBBBB..",
+      "..DBBBBBBBBBBD..",
+      "..DDBBBBBBBBDD..",
+      "...BBBBBBBBBB...",
+      "....DD....DD....",
+      "................"
+    ],
+    "walk": { "row": 14, "rows": [".....DD..DD....."] },
+    "eyes": { "y": 7, "left": 4, "right": 10 }
+  },
+  {
+    "id": "frog",
+    "label": "Frog",
+    "body": [
+      "................",
+      "................",
+      "................",
+      "..BBBB....BBBB..",
+      ".BBBBBB..BBBBBB.",
+      ".BBBBBBBBBBBBBB.",
+      ".BBBBBBBBBBBBBB.",
+      ".BPBBBBBBBBBBPB.",
+      ".BBDBBBBBBBBDBB.",
+      "..BBDDDDDDDDBB..",
+      "...BBBBBBBBBB...",
+      "..BBLLLLLLLLBB..",
+      ".BBBLLLLLLLLBBB.",
+      "DDD.DD....DD.DDD",
+      "................",
+      "................"
+    ],
+    "walk": { "row": 13, "rows": [".DDD.DD..DD.DDD."] },
+    "eyes": { "y": 4, "left": 3, "right": 11 }
+  },
+  {
+    "id": "crab",
+    "label": "Crab",
+    "body": [
+      "................",
+      "................",
+      "................",
+      ".B.B........B.B.",
+      ".BBB........BBB.",
+      "..B..........B..",
+      "..B..BBBBBB..B..",
+      "..BBBBBBBBBBBB..",
+      "...BBBBBBBBBB...",
+      "...BBBBBBBBBB...",
+      "...BBBBBBBBBB...",
+      "....DDDDDDDD....",
+      "...D.D....D.D...",
+      "..D.D......D.D..",
+      "................",
+      "................"
+    ],
+    "walk": { "row": 12, "rows": ["....D.D..D.D....", "...D..D..D..D..."] },
+    "eyes": { "y": 8, "left": 5, "right": 9 }
+  },
+  {
+    "id": "pou",
+    "label": "Pou",
+    "body": [
+      "................",
+      "................",
+      "................",
+      "....WW....WW....",
+      "...WWWW..WWWW...",
+      "...WWWWFFWWWW...",
+      "...WWWWFFWWWW...",
+      "...FWWFBBFWWF...",
+      "...BFFBBBBFFB...",
+      "...BBBBBBBBBB...",
+      "..BBBBBBBBBBBB..",
+      "..BBBFBBBBBBBB..",
+      ".BBBBFFBBBBBBBB.",
+      ".BBBBBBBBBBBBBB.",
+      ".BBBBBBBBBBBBBB.",
+      "..DDDDDDDDDDDD.."
+    ],
+    "walk": { "row": 15, "rows": [".DDDDDDDDDDDDDD."] },
+    "eyes": { "y": 4, "left": 4, "right": 10 }
   }
 ]
