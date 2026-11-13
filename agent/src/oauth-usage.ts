@@ -38,8 +38,9 @@ function window(value: unknown): LimitWindow | null {
   if (!isObject(value)) return null;
   const { utilization, resets_at } = value;
   if (typeof utilization !== "number" || !Number.isFinite(utilization)) return null;
-  // No reset time means no window is running right now: nothing used, already reset.
-  if (resets_at === null || resets_at === undefined) return { usedPct: 0, resetsAt: 0 };
+  // No reset time and nothing used: no window is running right now, so it counts as already reset.
+  // No reset time with something used makes no sense, so it is ignored rather than guessed.
+  if (resets_at === null || resets_at === undefined) return utilization === 0 ? { usedPct: 0, resetsAt: 0 } : null;
   if (typeof resets_at !== "string") return null;
   const resetsAt = Date.parse(resets_at);
   return Number.isNaN(resetsAt) ? null : { usedPct: Math.min(100, Math.max(0, utilization)), resetsAt };

@@ -61,6 +61,13 @@ extension AccountLimits {
         return copy.fiveHour == nil && copy.sevenDay == nil ? nil : copy
     }
 
+    /// No source has confirmed these limits for a while: the agent re-announces them every few minutes while any works.
+    public func isStale(at now: Date) -> Bool {
+        now.timeIntervalSince(updatedAt) > AccountLimits.staleAfter
+    }
+
+    public static let staleAfter: TimeInterval = 12 * 60
+
     /// "5h 44% · 7d 39%", or nil when no window was ever reported.
     public func line(at now: Date) -> String? {
         guard let live = live(at: now) else { return nil }
@@ -118,6 +125,9 @@ public enum LimitsReport {
     /// Empty when nothing is known.
     public static func lines(limits: AccountLimits?, session: SessionUsage?, spend: DailySpend?, at now: Date, calendar: Calendar = .current) -> [String] {
         var lines: [String] = []
+        if let limits, limits.isStale(at: now) {
+            lines.append("no update for \(untilReset(now, from: limits.updatedAt)) · use Claude Code to refresh")
+        }
         if let live = limits?.live(at: now) {
             if let window = live.fiveHour { lines.append(window.line("5h", at: now)) }
             if let window = live.sevenDay { lines.append(window.line("7d", at: now)) }

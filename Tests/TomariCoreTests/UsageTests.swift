@@ -159,3 +159,26 @@ func spendTests() {
         expectEqual(CreatureAppearance.limits([], hovered: false).pixels.joined().compactMap { $0 }.count, 0)
     }
 }
+
+func staleTests() {
+    let now = Date(timeIntervalSince1970: 1_794_571_200)
+    let limits = AccountLimits(fiveHour: LimitWindow(usedPct: 44, resetsAt: now + 7800), sevenDay: nil, updatedAt: now)
+
+    test("limits go stale after twelve minutes without news") {
+        expectEqual(limits.isStale(at: now + 11 * 60), false)
+        expectEqual(limits.isStale(at: now + 13 * 60), true)
+    }
+
+    test("stale limits say how long it has been, ahead of the windows") {
+        let lines = LimitsReport.lines(limits: limits, session: nil, spend: nil, at: now + 3 * 3600 + 120)
+        expectEqual(lines.first, "no update for 3h 2m · use Claude Code to refresh")
+        expectEqual(lines.count, 2)
+        expectEqual(LimitsReport.lines(limits: limits, session: nil, spend: nil, at: now + 60).count, 1)
+    }
+
+    test("a stale limits cell is dimmed") {
+        let meters = [LimitMeter(label: "5h", usedPct: 44)]
+        expectEqual(CreatureAppearance.limits(meters, hovered: false, stale: true).opacity, 0.45)
+        expectEqual(CreatureAppearance.limits(meters, hovered: false).opacity, 1)
+    }
+}

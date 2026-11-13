@@ -11,8 +11,8 @@ private let glyphs: [Character: [String]] = [
 
 extension CreatureAppearance {
     /// The strip cell that shows the account's limits: a small bar per window, 5 hours above 7 days.
-    /// A hot window rings the tile in red.
-    public static func limits(_ meters: [LimitMeter], hovered: Bool) -> CreatureAppearance {
+    /// A hot window rings the tile in red; stale limits are dimmed.
+    public static func limits(_ meters: [LimitMeter], hovered: Bool, stale: Bool = false) -> CreatureAppearance {
         let barX = 5, barWidth = 18, barHeight = 5, gap = 4
         let shown = Array(meters.prefix(2))
         let total = shown.count * barHeight + max(shown.count - 1, 0) * gap
@@ -47,6 +47,6 @@ extension CreatureAppearance {
 
         var tile = hovered ? Tile(fill: .white(0.12)) : Tile()
         if shown.contains(where: { $0.level == .hot }) { tile.border = .danger }
-        return CreatureAppearance(pixels: pixels, tile: tile, opacity: 1)
+        return CreatureAppearance(pixels: pixels, tile: tile, opacity: stale ? 0.45 : 1)
     }
 }

@@ -103,7 +103,7 @@ final class StripController {
                 // Empty bars until Claude Code reports the limits, so the cell is there from the start.
                 var meters = link.list.limits?.meters(at: now) ?? []
                 if meters.isEmpty { meters = [LimitMeter(label: "5h", usedPct: 0), LimitMeter(label: "7d", usedPct: 0)] }
-                appearances.append(CreatureAppearance.limits(meters, hovered: hovered == .limits))
+                appearances.append(CreatureAppearance.limits(meters, hovered: hovered == .limits, stale: link.list.limits?.isStale(at: now) ?? false))
             }
             view.show(appearances + [CreatureAppearance.addButton(hovered: hovered == .add)])
         }
@@ -142,7 +142,8 @@ final class StripController {
             let focused = link.list.focusedId.flatMap { link.list.sessions[$0] }
             let lines = LimitsReport.lines(limits: link.list.limits, session: focused?.usage, spend: link.list.spend, at: now)
             let level = link.list.limits?.meters(at: now).map(\.level)
-            let color = level?.contains(.hot) == true ? failed : level?.contains(.warm) == true ? NSColor(paint: .accent) : Style.text
+            let color = stale ? Style.muted : level?.contains(.hot) == true ? failed : level?.contains(.warm) == true ? NSColor(paint: .accent) : Style.text
+            let stale = link.list.limits?.isStale(at: now) ?? false
             let rest = lines.dropFirst().joined(separator: "\n")
             if lines.isEmpty {
                 return content("Claude usage", "no data yet", Style.muted, beside: layout.cellFrame(index, in: strip), detail: "send a message in a new Claude Code session")

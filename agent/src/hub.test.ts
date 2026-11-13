@@ -268,6 +268,26 @@ describe("SessionHub statusline readings", () => {
     expect(hub.currentLimits()).toMatchObject({ fiveHour: { usedPct: 40 } });
   });
 
+  test("identical limits are re-announced only as a heartbeat, a few minutes apart", () => {
+    const { hub, changes } = setup(undefined, 1_000_000);
+    const limits = (updatedAt: number) => ({ fiveHour: { usedPct: 40, resetsAt: 9_000_000 }, sevenDay: null, updatedAt });
+    hub.setLimits(limits(1_000_000));
+    hub.setLimits(limits(1_060_000));
+    expect(changes.filter((c) => c.type === "limits")).toHaveLength(1);
+    hub.setLimits(limits(1_000_000 + 5 * 60 * 1000));
+    expect(changes.filter((c) => c.type === "limits")).toHaveLength(2);
+  });
+
+  test("a report keeps the windows it lacks, and \"no window running\" never overwrites one that is counting", () => {
+    const { hub } = setup(undefined, 1_000_000);
+    hub.handleStatusline(reading(A)); // 5h 40 % until 2_000_000, 7d 30 % until 9_000_000
+    hub.setLimits({ fiveHour: null, sevenDay: { usedPct: 31, resetsAt: 9_000_000 }, updatedAt: 1 });
+    expect(hub.currentLimits()).toMatchObject({ fiveHour: { usedPct: 40 }, sevenDay: { usedPct: 31 } });
+
+    hub.setLimits({ fiveHour: { usedPct: 0, resetsAt: 0 }, sevenDay: null, updatedAt: 2 });
+    expect(hub.currentLimits()!.fiveHour!.usedPct).toBe(40);
+  });
+
   test("windows that have reset are still reported, for the overlay to show as 0 %", () => {
     const { hub, tick } = setup(undefined, 1_000_000);
     hub.handleStatusline(reading(A, { rate_limits: { five_hour: { used_percentage: 40, resets_at: 1_001 }, seven_day: { used_percentage: 30, resets_at: 1_005 } } }));

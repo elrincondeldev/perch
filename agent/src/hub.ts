@@ -3,7 +3,7 @@
  * about changes the panel can see, so a burst of identical hook events yields one message.
  */
 import { basename } from "node:path";
-import { DEFAULT_ICON, type AccountLimits, type DailySpend, type PanelSession, type SessionIcon, type SessionUsage } from "../../shared/protocol.ts";
+import { DEFAULT_ICON, type AccountLimits, type DailySpend, type LimitWindow, type PanelSession, type SessionIcon, type SessionUsage } from "../../shared/protocol.ts";
 import { applyHookEvent, reconcile, type AgentEntry, type HookEvent, type SessionRecord } from "./state.ts";
 import { localDay, type Pin, type Store } from "./store.ts";
 import type { StatuslineReading } from "./usage.ts";
@@ -17,6 +17,7 @@ export type HubChange =
 export type HubListener = (change: HubChange) => void;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HEARTBEAT_MS = 4 * 60 * 1000;
 const VISIBLE: (keyof SessionRecord)[] = ["name", "cwd", "state", "activity", "live", "stateSince"];
 
 export class SessionHub {
@@ -101,8 +102,11 @@ export class SessionHub {
   }
 
   /** Records account limits from any source; announced only when they differ from what is known. */
-  setLimits(limits: AccountLimits) {
-    if (sameLimits(this.limits, limits)) return;
+  setLimits(reported: AccountLimits) {
+    const limits = mergeLimits(this.limits, reported, this.now());
+    // Identical limits are announced again only as a heartbeat, so the overlay can tell "unchanged" from "no news".
+    const heartbeat = this.limits !== null && limits.updatedAt - this.limits.updatedAt >= HEARTBEAT_MS;
+    if (sameLimits(this.limits, limits) && !heartbeat) return;
     this.limits = limits;
     this.store.saveLimits(limits);
     this.emit({ type: "limits", limits });
@@ -189,6 +193,20 @@ export class SessionHub {
 
 function sameValues<T extends object>(a: T | undefined, b: T) {
   return a !== undefined && (Object.keys(b) as (keyof T)[]).every((k) => a[k] === b[k]);
+}
+
+/**
+ * Folds a report into what is known, window by window. A window a report lacks keeps its last value, and a report
+ * of "no window running" (reset time 0) never replaces a window that is still counting.
+ */
+function mergeLimits(known: AccountLimits | null, reported: AccountLimits, now: number): AccountLimits {
+  if (!known) return reported;
+  const pick = (old: LimitWindow | null, next: LimitWindow | null) => {
+    if (next === null) return old;
+    if (next.resetsAt === 0 && old !== null && old.resetsAt > now) return old;
+    return next;
+  };
+  return { fiveHour: pick(known.fiveHour, reported.fiveHour), sevenDay: pick(known.sevenDay, reported.sevenDay), updatedAt: reported.updatedAt };
 }
 
 /** Ignores `updatedAt`, so a repeated reading isn't announced again. */
