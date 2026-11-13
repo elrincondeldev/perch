@@ -225,7 +225,8 @@ describe("SessionHub statusline readings", () => {
       const second = setup(new Store(path));
       expect(second.hub.currentLimits()!.fiveHour!.usedPct).toBe(40);
       second.tick(10_000_000);
-      expect(second.hub.currentLimits()).toBeNull();
+      // Past its reset time the window stays; the overlay shows it as 0 %.
+      expect(second.hub.currentLimits()!.fiveHour!.resetsAt).toBe(2_000_000);
       second.store.close();
     } finally {
       for (const ext of ["", "-wal", "-shm"]) rmSync(path + ext, { force: true });
@@ -267,11 +268,11 @@ describe("SessionHub statusline readings", () => {
     expect(hub.currentLimits()).toMatchObject({ fiveHour: { usedPct: 40 } });
   });
 
-  test("windows that have reset are no longer reported", () => {
+  test("windows that have reset are still reported, for the overlay to show as 0 %", () => {
     const { hub, tick } = setup(undefined, 1_000_000);
     hub.handleStatusline(reading(A, { rate_limits: { five_hour: { used_percentage: 40, resets_at: 1_001 }, seven_day: { used_percentage: 30, resets_at: 1_005 } } }));
     expect(hub.currentLimits()).not.toBeNull();
     tick(2_000_000); // now = 3_000_000 ms, past both resets (1_001_000 and 1_005_000 ms)
-    expect(hub.currentLimits()).toBeNull();
+    expect(hub.currentLimits()).toMatchObject({ fiveHour: { resetsAt: 1_001_000 }, sevenDay: { resetsAt: 1_005_000 } });
   });
 });

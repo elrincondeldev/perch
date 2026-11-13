@@ -23,6 +23,13 @@ describe("parseOauthUsage", () => {
     );
     expect(limits).toEqual({ fiveHour: { usedPct: 35, resetsAt: Date.parse("2026-11-13T15:00:00Z") }, sevenDay: null, updatedAt: 42 });
   });
+  test("a window with no reset time is nothing used and already reset", () => {
+    expect(parseOauthUsage({ five_hour: { utilization: 0, resets_at: null }, seven_day: null }, 7)).toEqual({
+      fiveHour: { usedPct: 0, resetsAt: 0 },
+      sevenDay: null,
+      updatedAt: 7,
+    });
+  });
   test("clamps the percentage and drops unusable windows; null when nothing is left", () => {
     expect(parseOauthUsage({ five_hour: { utilization: 250, resets_at: "2026-11-13T15:00:00Z" } }, 0)!.fiveHour!.usedPct).toBe(100);
     expect(parseOauthUsage({ five_hour: { utilization: 5, resets_at: "x" }, seven_day: { utilization: "5" } }, 0)).toBeNull();

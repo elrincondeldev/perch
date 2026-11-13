@@ -64,15 +64,16 @@ func usageTests() {
         expectEqual(LimitWindow(usedPct: 39, resetsAt: now + 3 * 86400 + 5 * 3600).line("7d", at: now), "7d 39% · resets in 3d 5h")
         expectEqual(LimitWindow(usedPct: 5, resetsAt: now + 25 * 60).line("5h", at: now), "5h 5% · resets in 25m")
         expectEqual(LimitWindow(usedPct: 5, resetsAt: now + 30).line("5h", at: now), "5h 5% · resets in <1m")
+        expectEqual(LimitWindow(usedPct: 90, resetsAt: now - 5).line("5h", at: now), "5h 0% · no active window")
     }
 
-    test("windows that have reset are dropped from the line") {
+    test("windows that have reset read as 0 %") {
         let both = AccountLimits(
             fiveHour: LimitWindow(usedPct: 44, resetsAt: now + 100), sevenDay: LimitWindow(usedPct: 39, resetsAt: now + 5000), updatedAt: now)
         expectEqual(both.line(at: now), "5h 44% · 7d 39%")
-        expectEqual(both.line(at: now + 200), "7d 39%")
-        expectEqual(both.line(at: now + 6000), nil)
-        expectEqual(both.live(at: now + 6000), nil)
+        expectEqual(both.line(at: now + 200), "5h 0% · 7d 39%")
+        expectEqual(both.line(at: now + 6000), "5h 0% · 7d 0%")
+        expectEqual(AccountLimits(fiveHour: nil, sevenDay: nil, updatedAt: now).live(at: now), nil)
     }
 }
 
@@ -93,13 +94,14 @@ func meterTests() {
         expectEqual(LimitMeter(label: "7d", usedPct: -4).text, "0%")
     }
 
-    test("an account has a meter for each window that hasn't reset, 5-hour first") {
+    test("an account has a meter for each reported window, 5-hour first, empty once reset") {
         let both = AccountLimits(
             fiveHour: LimitWindow(usedPct: 44, resetsAt: now + 100), sevenDay: LimitWindow(usedPct: 39, resetsAt: now + 5000), updatedAt: now)
         expectEqual(both.meters(at: now).map(\.label), ["5h", "7d"])
         expectEqual(both.meters(at: now).map(\.text), ["44%", "39%"])
-        expectEqual(both.meters(at: now + 200).map(\.label), ["7d"])
-        expectEqual(both.meters(at: now + 6000).count, 0)
+        expectEqual(both.meters(at: now + 200).map(\.text), ["0%", "39%"])
+        expectEqual(both.meters(at: now + 6000).map(\.text), ["0%", "0%"])
+        expectEqual(AccountLimits(fiveHour: nil, sevenDay: nil, updatedAt: now).meters(at: now).count, 0)
     }
 }
 

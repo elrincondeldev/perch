@@ -6,7 +6,7 @@ import { basename } from "node:path";
 import { DEFAULT_ICON, type AccountLimits, type DailySpend, type PanelSession, type SessionIcon, type SessionUsage } from "../../shared/protocol.ts";
 import { applyHookEvent, reconcile, type AgentEntry, type HookEvent, type SessionRecord } from "./state.ts";
 import { localDay, type Pin, type Store } from "./store.ts";
-import { liveLimits, type StatuslineReading } from "./usage.ts";
+import type { StatuslineReading } from "./usage.ts";
 
 export type HubChange =
   | { type: "session"; session: PanelSession }
@@ -65,9 +65,12 @@ export class SessionHub {
     for (const rec of reconcile(this.records, agents, this.now())) this.commit(rec);
   }
 
-  /** Account limits that haven't reset yet, or null when none is known. */
+  /**
+   * The account limits as last reported, or null when none is known. A window whose reset time has passed is kept:
+   * the overlay shows it as 0 % rather than losing it until the next report.
+   */
   currentLimits(): AccountLimits | null {
-    return liveLimits(this.limits, this.now());
+    return this.limits;
   }
 
   /** What all sessions have cost today, or null while nothing has. */

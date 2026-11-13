@@ -37,7 +37,10 @@ export function tokenFrom(credentialsJson: string, now: number): string | null {
 function window(value: unknown): LimitWindow | null {
   if (!isObject(value)) return null;
   const { utilization, resets_at } = value;
-  if (typeof utilization !== "number" || !Number.isFinite(utilization) || typeof resets_at !== "string") return null;
+  if (typeof utilization !== "number" || !Number.isFinite(utilization)) return null;
+  // No reset time means no window is running right now: nothing used, already reset.
+  if (resets_at === null || resets_at === undefined) return { usedPct: 0, resetsAt: 0 };
+  if (typeof resets_at !== "string") return null;
   const resetsAt = Date.parse(resets_at);
   return Number.isNaN(resetsAt) ? null : { usedPct: Math.min(100, Math.max(0, utilization)), resetsAt };
 }

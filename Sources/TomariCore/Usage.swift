@@ -44,22 +44,24 @@ extension SessionUsage {
 }
 
 extension LimitWindow {
-    /// "5h 44% · resets in 2h 10m"
+    /// "5h 44% · resets in 2h 10m", or "5h 0% · no active window" once it has reset
     public func line(_ label: String, at now: Date) -> String {
-        "\(label) \(percentText(usedPct)) · resets in \(untilReset(resetsAt, from: now))"
+        if resetsAt <= now { return "\(label) 0% · no active window" }
+        return "\(label) \(percentText(usedPct)) · resets in \(untilReset(resetsAt, from: now))"
     }
 }
 
 extension AccountLimits {
-    /// The windows that haven't reset yet, or nil when none is left.
+    /// The windows as they stand now: one whose reset time has passed reads as nothing used, since a new
+    /// window only starts with the next message. Nil when no window was ever reported.
     public func live(at now: Date) -> AccountLimits? {
         var copy = self
-        if let window = copy.fiveHour, window.resetsAt <= now { copy.fiveHour = nil }
-        if let window = copy.sevenDay, window.resetsAt <= now { copy.sevenDay = nil }
+        if let window = copy.fiveHour, window.resetsAt <= now { copy.fiveHour = LimitWindow(usedPct: 0, resetsAt: window.resetsAt) }
+        if let window = copy.sevenDay, window.resetsAt <= now { copy.sevenDay = LimitWindow(usedPct: 0, resetsAt: window.resetsAt) }
         return copy.fiveHour == nil && copy.sevenDay == nil ? nil : copy
     }
 
-    /// "5h 44% · 7d 39%", or nil when every window has reset.
+    /// "5h 44% · 7d 39%", or nil when no window was ever reported.
     public func line(at now: Date) -> String? {
         guard let live = live(at: now) else { return nil }
         var parts: [String] = []
@@ -92,7 +94,7 @@ public struct LimitMeter: Equatable, Sendable {
 }
 
 extension AccountLimits {
-    /// A bar for each window that hasn't reset yet, the 5-hour one first.
+    /// A bar for each reported window, the 5-hour one first; a window that has reset is empty.
     public func meters(at now: Date) -> [LimitMeter] {
         guard let live = live(at: now) else { return [] }
         var meters: [LimitMeter] = []
