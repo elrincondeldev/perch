@@ -4,56 +4,25 @@
  * network-facing port can never inject hook events.
  */
 import { timingSafeEqual } from "node:crypto";
-import { basename } from "node:path";
-import type { LibraryEntry, ServerMessage } from "../../shared/protocol.ts";
-import { listDesktopSessions, type DesktopSession } from "./desktop-sessions.ts";
+import type { ServerMessage } from "../../shared/protocol.ts";
+import type { HostSwitch } from "./host.ts";
 import type { SessionHub } from "./hub.ts";
-import { openSession, type OpenResult } from "./open-session.ts";
 import { parseClientMessage } from "./protocol-guard.ts";
 import type { HookEvent } from "./state.ts";
 
 export interface ServerOptions {
   hub: SessionHub;
+  /** Opening a session and listing the ones to pin go to the host in use. */
+  hosts: HostSwitch;
   token: string;
   hookPort: number;
   panelPort: number;
   panelHost?: string;
-  /** Replaceable so tests don't open real sessions or read the real desktop app. */
-  open?: (id: string) => Promise<OpenResult>;
-  desktopSessions?: () => Promise<DesktopSession[]>;
 }
 
 const TOPIC = "panel";
-const LIBRARY_SIZE = 100;
 
-export function startServers({
-  hub,
-  token,
-  hookPort,
-  panelPort,
-  panelHost = "127.0.0.1",
-  open = openSession,
-  desktopSessions = () => listDesktopSessions(),
-}: ServerOptions) {
-  async function library(): Promise<LibraryEntry[]> {
-    return (await desktopSessions())
-      .filter((s) => !s.archived)
-      .slice(0, LIBRARY_SIZE)
-      .map((s) => ({
-        id: s.sessionId,
-        name: s.title ?? hub.get(s.sessionId)?.name ?? basename(s.cwd),
-        cwd: s.cwd,
-        lastActivityAt: s.lastActivityAt,
-        pinned: hub.get(s.sessionId)?.pinned ?? false,
-      }));
-  }
-
-  /** Lets the panel pin a desktop session whose process isn't running, so the agent never saw it. */
-  async function adoptFromDesktop(id: string) {
-    const session = (await desktopSessions()).find((s) => s.sessionId === id);
-    if (session) hub.adopt(session.sessionId, session.title, session.cwd, session.lastActivityAt);
-  }
-
+export function startServers({ hub, hosts, token, hookPort, panelPort, panelHost = "127.0.0.1" }: ServerOptions) {
   const hookServer = Bun.serve({
     hostname: "127.0.0.1",
     port: hookPort,
@@ -75,7 +44,7 @@ export function startServers({
     port: panelPort,
     fetch(req, server) {
       const url = new URL(req.url);
-      if (url.pathname === "/health") return Response.json({ ok: true, sessions: hub.snapshot().length });
+      if (url.pathname === "/health") return Response.json({ ok: true, sessions: hub.snapshot().length, host: hosts.current.id });
       if (url.pathname !== "/ws") return new Response("not found", { status: 404 });
       if (!sameSecret(url.searchParams.get("token"), token)) return new Response("unauthorized", { status: 401 });
       if (server.upgrade(req)) return;
@@ -85,21 +54,35 @@ export function startServers({
       maxPayloadLength: 4 * 1024,
       open(ws) {
         ws.subscribe(TOPIC);
-        send(ws, { type: "snapshot", sessions: hub.snapshot(), focusedId: hub.focusedId });
+        send(ws, { type: "snapshot", sessions: hub.snapshot(), focusedId: hub.focusedId, host: hosts.current.id });
       },
       async message(ws, raw) {
         const msg = parseClientMessage(String(raw));
         if (!msg) return send(ws, { type: "error", message: "invalid message" });
-        if (msg.type === "library") return send(ws, { type: "library", sessions: await library() });
-        if (!hub.has(msg.id) && msg.type !== "open") await adoptFromDesktop(msg.id);
+        try {
+          if (msg.type === "library") return send(ws, { type: "library", sessions: await hosts.current.library() });
+        } catch (err) {
+          return send(ws, { type: "error", message: `could not list sessions: ${text(err)}`.slice(0, 200) });
+        }
+        if (msg.type === "host") {
+          try {
+            // A change reaches every panel through the subscription below; this confirms a choice that changed nothing.
+            if (!(await hosts.use(msg.host))) send(ws, { type: "host", host: msg.host });
+          } catch (err) {
+            send(ws, { type: "error", message: `could not save the host: ${text(err)}`.slice(0, 200) });
+          }
+          return;
+        }
+        // Lets the panel pin a session the agent never saw, e.g. a desktop session whose process isn't running.
+        if (!hub.has(msg.id) && msg.type !== "open") await hosts.current.adopt(msg.id);
         if (!hub.has(msg.id)) return send(ws, { type: "error", message: "unknown session" });
 
         switch (msg.type) {
           case "open": {
-            const result = await open(msg.id);
-            // The desktop log confirms focus a moment later; show it right away.
-            if (result.ok) hub.setFocused(msg.id);
-            else send(ws, { type: "error", message: result.error });
+            const result = await hosts.current.open(msg.id);
+            // The host's focus watcher confirms a moment later; show it right away.
+            if (result.focused) hub.setFocused(msg.id);
+            else send(ws, { type: "error", message: result.message });
             break;
           }
           case "pin":
@@ -116,13 +99,16 @@ export function startServers({
     },
   });
 
-  const unsubscribe = hub.subscribe((change) => panelServer.publish(TOPIC, JSON.stringify(change satisfies ServerMessage)));
+  const publish = (message: ServerMessage) => void panelServer.publish(TOPIC, JSON.stringify(message));
+  const unsubscribeHub = hub.subscribe(publish);
+  const unsubscribeHosts = hosts.subscribe((host) => publish({ type: "host", host }));
 
   return {
     hookServer,
     panelServer,
     stop() {
-      unsubscribe();
+      unsubscribeHub();
+      unsubscribeHosts();
       hookServer.stop(true);
       panelServer.stop(true);
     },
@@ -131,6 +117,10 @@ export function startServers({
 
 function send(ws: { send(data: string): unknown }, message: ServerMessage) {
   ws.send(JSON.stringify(message));
+}
+
+function text(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /** Constant-time, so response timing doesn't leak the token. */

@@ -26,9 +26,10 @@ func protocolTests() {
     test("decodes a snapshot, null fields and all") {
         let json = #"{"type":"snapshot","focusedId":null,"sessions":[\#(sessionJSON),"#
             + ##"{"id":"b","name":"n","cwd":"/","state":"done","activity":null,"live":false,"stateSince":0,"pinned":false,"position":null,"icon":{"character":"default","color":"#d97757"}}]}"##
-        guard case .snapshot(let sessions, let focusedId)? = ServerMessage.parse(json) else {
+        guard case .snapshot(let sessions, let focusedId, let host)? = ServerMessage.parse(json) else {
             return expect(false, "not a snapshot")
         }
+        expectEqual(host, nil)
         expectEqual(sessions.count, 2)
         expectEqual(focusedId, nil)
         expectEqual(sessions[1].activity, nil)
@@ -37,7 +38,7 @@ func protocolTests() {
 
     test("a snapshot skips sessions it can't read instead of dropping them all") {
         let json = #"{"type":"snapshot","focusedId":"x","sessions":[\#(sessionJSON),{"id":42}]}"#
-        guard case .snapshot(let sessions, let focusedId)? = ServerMessage.parse(json) else {
+        guard case .snapshot(let sessions, let focusedId, _)? = ServerMessage.parse(json) else {
             return expect(false, "not a snapshot")
         }
         expectEqual(sessions.map(\.name), ["Node migration"])
@@ -57,6 +58,29 @@ func protocolTests() {
         expectEqual(ServerMessage.parse(#"{"type":"focus","id":"a"}"#), .focus(id: "a"))
         expectEqual(ServerMessage.parse(#"{"type":"focus","id":null}"#), .focus(id: nil))
         expectEqual(ServerMessage.parse(#"{"type":"error","message":"unknown session"}"#), .error(message: "unknown session"))
+    }
+
+    test("a snapshot carries the host in use; one from an older agent, or naming a host this build doesn't know, has none") {
+        func host(_ field: String) -> SessionHost?? {
+            guard case .snapshot(_, _, let host)? = ServerMessage.parse(#"{"type":"snapshot","focusedId":null,"sessions":[]\#(field)}"#) else { return nil }
+            return .some(host)
+        }
+        expectEqual(host(#","host":"ghostty""#), .some(.ghostty))
+        expectEqual(host(#","host":"desktop""#), .some(.desktop))
+        expectEqual(host(""), .some(nil))
+        expectEqual(host(#","host":"iterm""#), .some(nil))
+    }
+
+    test("decodes a host change, and ignores one to a host it doesn't know") {
+        expectEqual(ServerMessage.parse(#"{"type":"host","host":"ghostty"}"#), .host(.ghostty))
+        expectEqual(ServerMessage.parse(#"{"type":"host","host":"desktop"}"#), .host(.desktop))
+        expectEqual(ServerMessage.parse(#"{"type":"host","host":"iterm"}"#), nil)
+        expectEqual(ServerMessage.parse(#"{"type":"host"}"#), nil)
+    }
+
+    test("the hosts are the agent's, named for the menu") {
+        expectEqual(SessionHost.allCases.map(\.rawValue), ["desktop", "ghostty"])
+        expectEqual(SessionHost.allCases.map(\.title), ["Claude App", "Ghostty"])
     }
 
     test("ignores messages it doesn't use and anything malformed") {
@@ -79,6 +103,8 @@ func protocolTests() {
         }
         expectEqual(try object(.open(id: "abc")), ["type": "open", "id": "abc"])
         expectEqual(try object(.library), ["type": "library"])
+        expectEqual(try object(.host(.ghostty)), ["type": "host", "host": "ghostty"])
+        expectEqual(try object(.host(.desktop)), ["type": "host", "host": "desktop"])
         expectEqual(try object(.pin(id: "abc", pinned: true)), ["type": "pin", "id": "abc", "pinned": true])
         expectEqual(
             try object(.icon(id: "abc", icon: SessionIcon(character: "cat", color: "#4f7cff"))),
@@ -92,6 +118,7 @@ func protocolTests() {
             expectEqual(message.sessionId, "a")
         }
         expectEqual(ClientMessage.library.sessionId, nil)
+        expectEqual(ClientMessage.host(.ghostty).sessionId, nil)
     }
 
     test("the color palette matches the Pi panel's and includes the default") {

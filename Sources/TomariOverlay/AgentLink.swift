@@ -46,7 +46,7 @@ final class AgentLink {
         task.send(.string(message.json)) { _ in }
     }
 
-    /// `reply` runs once, with the desktop sessions that can be pinned, most recent first.
+    /// `reply` runs once, with the sessions that can be pinned, most recent first.
     func requestLibrary(then reply: @escaping ([LibraryEntry]) -> Void) {
         libraryReply = reply
         send(.library)

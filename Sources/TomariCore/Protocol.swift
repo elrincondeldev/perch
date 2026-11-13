@@ -4,6 +4,22 @@ import Foundation
 
 public let panelPort = 7778
 
+/// Where sessions run and are opened; the agent's SESSION_HOSTS.
+public enum SessionHost: String, CaseIterable, Sendable, Decodable {
+    case desktop
+    case ghostty
+
+    public var title: String {
+        switch self {
+        case .desktop: return "Claude App"
+        case .ghostty: return "Ghostty"
+        }
+    }
+
+    /// Shown under the choices: switching host moves no session.
+    public static let switchNote = "Running sessions stay where they are"
+}
+
 public enum SessionState: String, CaseIterable, Sendable, Decodable {
     case idle // started, no prompt yet
     case working
@@ -123,11 +139,14 @@ public struct LibraryEntry: Equatable, Sendable, Decodable {
 }
 
 public enum ServerMessage: Equatable, Sendable {
-    case snapshot(sessions: [PanelSession], focusedId: String?)
+    /// `host` is nil from an agent that predates hosts, or uses one this build doesn't know.
+    case snapshot(sessions: [PanelSession], focusedId: String?, host: SessionHost?)
     case session(PanelSession)
     case removed(id: String)
-    /// The session in front in the desktop app.
+    /// The session in front in the host.
     case focus(id: String?)
+    /// The agent switched host, or confirms the one asked for.
+    case host(SessionHost)
     case error(message: String)
     /// Reply to a library request, most recent first.
     case library([LibraryEntry])
@@ -140,13 +159,15 @@ public enum ServerMessage: Equatable, Sendable {
         switch type {
         case "snapshot":
             guard let m = try? decoder.decode(Snapshot.self, from: data) else { return nil }
-            return .snapshot(sessions: m.sessions.compactMap(\.value), focusedId: m.focusedId)
+            return .snapshot(sessions: m.sessions.compactMap(\.value), focusedId: m.focusedId, host: m.host?.value)
         case "session":
             return (try? decoder.decode(SessionChange.self, from: data)).map { .session($0.session) }
         case "removed":
             return (try? decoder.decode(Removed.self, from: data)).map { .removed(id: $0.id) }
         case "focus":
             return (try? decoder.decode(Focus.self, from: data)).map { .focus(id: $0.id) }
+        case "host":
+            return (try? decoder.decode(HostChange.self, from: data)).map { .host($0.host) }
         case "error":
             return (try? decoder.decode(Failure.self, from: data)).map { .error(message: $0.message) }
         case "library":
@@ -157,7 +178,8 @@ public enum ServerMessage: Equatable, Sendable {
     }
 
     private struct Envelope: Decodable { let type: String }
-    private struct Snapshot: Decodable { let sessions: [Lenient<PanelSession>]; let focusedId: String? }
+    private struct Snapshot: Decodable { let sessions: [Lenient<PanelSession>]; let focusedId: String?; let host: Lenient<SessionHost>? }
+    private struct HostChange: Decodable { let host: SessionHost }
     private struct SessionChange: Decodable { let session: PanelSession }
     private struct Removed: Decodable { let id: String }
     private struct Focus: Decodable { let id: String? }
@@ -176,13 +198,15 @@ public enum ClientMessage: Equatable, Sendable {
     case pin(id: String, pinned: Bool)
     /// The agent stores icons with pins, so this also pins the session, and unpinning resets its icon.
     case icon(id: String, icon: SessionIcon)
-    /// Asks for the desktop sessions that can be pinned; answered with `ServerMessage.library`.
+    /// Asks for the sessions that can be pinned; answered with `ServerMessage.library`.
     case library
+    /// Switches where sessions are opened; the agent saves it and answers with `ServerMessage.host`.
+    case host(SessionHost)
 
     public var sessionId: String? {
         switch self {
         case .open(let id), .pin(let id, _), .icon(let id, _): return id
-        case .library: return nil
+        case .library, .host: return nil
         }
     }
 
@@ -197,6 +221,8 @@ public enum ClientMessage: Equatable, Sendable {
             object = ["type": "icon", "id": id, "icon": ["character": icon.character, "color": icon.color]]
         case .library:
             object = ["type": "library"]
+        case .host(let host):
+            object = ["type": "host", "host": host.rawValue]
         }
         let body = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         return String(decoding: body, as: UTF8.self)
