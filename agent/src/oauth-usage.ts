@@ -69,29 +69,48 @@ export interface UsageSource {
   now: () => number;
 }
 
-/** One request. Null on any failure; the reason is never worth the risk of echoing a token. */
-export async function fetchLimits(source: UsageSource): Promise<AccountLimits | null> {
+export type FetchResult = { limits: AccountLimits } | { failure: string };
+
+/** One request. A failure carries a short reason that never includes the token or the response body. */
+export async function fetchLimitsResult(source: UsageSource): Promise<FetchResult> {
   try {
     const raw = await source.credentials();
-    const token = raw && tokenFrom(raw, source.now());
-    if (!token) return null;
+    if (!raw) return { failure: "no Claude Code credentials found (Keychain access denied, or not logged in)" };
+    const token = tokenFrom(raw, source.now());
+    if (!token) return { failure: "the Claude Code token is missing or expired; using Claude Code once refreshes it" };
     const res = await source.fetch(USAGE_URL, {
       headers: { Authorization: `Bearer ${token}`, "anthropic-beta": "oauth-2025-04-20" },
       signal: AbortSignal.timeout(8_000),
     });
-    return res.ok ? parseOauthUsage(await res.json(), source.now()) : null;
+    if (!res.ok) return { failure: `Anthropic answered HTTP ${res.status}` };
+    const limits = parseOauthUsage(await res.json(), source.now());
+    return limits ? { limits } : { failure: "the response had no usable limits" };
   } catch {
-    return null;
+    return { failure: "the request failed (offline?)" };
   }
+}
+
+/** Null on any failure. */
+export async function fetchLimits(source: UsageSource): Promise<AccountLimits | null> {
+  const result = await fetchLimitsResult(source);
+  return "limits" in result ? result.limits : null;
 }
 
 /** Fetches now and every few minutes. Returns a stop function. */
 export function startOauthUsage(hub: SessionHub, source: UsageSource = { credentials, fetch, now: Date.now }): () => void {
   if (process.env.TOMARI_NO_OAUTH_USAGE === "1") return () => {};
   let stopped = false;
+  let lastFailure = "";
   const tick = async () => {
-    const limits = await fetchLimits(source);
-    if (limits && !stopped) hub.setLimits(limits);
+    const result = await fetchLimitsResult(source);
+    if (stopped) return;
+    if ("limits" in result) {
+      lastFailure = "";
+      hub.setLimits(result.limits);
+    } else if (result.failure !== lastFailure) {
+      lastFailure = result.failure; // said once per change, not every 5 minutes
+      console.log(`oauth usage: ${result.failure}`);
+    }
   };
   void tick();
   const timer = setInterval(tick, EVERY_MS);
