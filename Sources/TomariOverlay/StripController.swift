@@ -99,22 +99,22 @@ final class StripController {
     private func labelContent(for cell: Cell, failure: String?, now: Date) -> HoverLabel.Content? {
         let failed = NSColor(paint: .danger)
         let strip = layout.stripRect(in: panel.frame, edge: edge)
-        func content(_ name: String, _ status: String, _ color: NSColor, beside: CGRect, outside: CGRect? = nil) -> HoverLabel.Content {
-            HoverLabel.Content(name: name, status: status, statusColor: color, frameBeside: beside, outside: outside ?? panel.frame, edge: edge)
+        func content(_ name: String, _ status: String, _ color: NSColor, beside: CGRect, outside: CGRect? = nil, detail: String? = nil) -> HoverLabel.Content {
+            HoverLabel.Content(name: name, status: status, statusColor: color, frameBeside: beside, outside: outside ?? panel.frame, edge: edge, detail: detail)
         }
         switch cell {
         case .session(let id):
             guard let index = shown.firstIndex(where: { $0.id == id }) else { return nil }
             let session = shown[index]
             let color = failure != nil ? failed : session.needsAttention ? NSColor(paint: .accent) : Style.muted
-            return content(session.name, failure ?? session.statusLine(at: now), color, beside: layout.cellFrame(index, in: strip))
+            return content(session.name, failure ?? session.statusLine(at: now), color, beside: layout.cellFrame(index, in: strip), detail: session.usage?.line)
         case .add:
             let status = failure ?? "pin any session from the Claude app"
             return content("Add a session", status, failure != nil ? failed : Style.muted, beside: layout.cellFrame(shown.count, in: strip))
         case .tab:
             let tab = layout.tabRect(in: panel.frame, edge: edge, collapsed: collapsed)
             let color = shown.contains(where: \.needsAttention) ? NSColor(paint: .accent) : Style.muted
-            return content(collapsed ? "Expand" : "Collapse", summary(of: shown), color, beside: tab, outside: collapsed ? tab : nil)
+            return content(collapsed ? "Expand" : "Collapse", summary(of: shown), color, beside: tab, outside: collapsed ? tab : nil, detail: link.list.limits?.line(at: now))
         }
     }
 

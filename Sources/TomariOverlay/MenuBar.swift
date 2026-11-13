@@ -28,6 +28,12 @@ final class MenuBar: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         menu.addItem(withTitle: statusText, action: nil, keyEquivalent: "")
+        let now = Date()
+        if let limits = link.list.limits?.live(at: now) {
+            for (label, window) in [("5h", limits.fiveHour), ("7d", limits.sevenDay)] {
+                if let window { menu.addItem(withTitle: window.line(label, at: now), action: nil, keyEquivalent: "") }
+            }
+        }
         menu.addItem(.separator())
 
         menu.addItem(entry(strip.hidden ? "Show Strip" : "Hide Strip", #selector(toggleStrip)))
