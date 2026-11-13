@@ -142,8 +142,8 @@ final class StripController {
             let focused = link.list.focusedId.flatMap { link.list.sessions[$0] }
             let lines = LimitsReport.lines(limits: link.list.limits, session: focused?.usage, spend: link.list.spend, at: now)
             let level = link.list.limits?.meters(at: now).map(\.level)
-            let color = stale ? Style.muted : level?.contains(.hot) == true ? failed : level?.contains(.warm) == true ? NSColor(paint: .accent) : Style.text
             let stale = link.list.limits?.isStale(at: now) ?? false
+            let color = stale ? Style.muted : level?.contains(.hot) == true ? failed : level?.contains(.warm) == true ? NSColor(paint: .accent) : Style.text
             let rest = lines.dropFirst().joined(separator: "\n")
             if lines.isEmpty {
                 return content("Claude usage", "no data yet", Style.muted, beside: layout.cellFrame(index, in: strip), detail: "send a message in a new Claude Code session")

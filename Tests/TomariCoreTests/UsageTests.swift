@@ -146,13 +146,13 @@ func spendTests() {
 
     test("the limits cell draws a bar per window, filled to its share, and rings the tile when one is hot") {
         func filled(_ a: CreatureAppearance, row: Int) -> Int { a.pixels[row].compactMap { $0 }.filter { $0 == RGB(r: 217, g: 217, b: 217) }.count }
-        let calmCell = CreatureAppearance.limits([LimitMeter(label: "5h", usedPct: 50), LimitMeter(label: "7d", usedPct: 100)], hovered: false)
+        let calmCell = CreatureAppearance.limits([LimitMeter(label: "5h", usedPct: 50), LimitMeter(label: "7d", usedPct: 60)], hovered: false)
         expectEqual(calmCell.pixels.count, spriteSize)
         expectEqual(calmCell.pixels[0].count, spriteSize)
         expectEqual(calmCell.tile, Tile())
         // Two bars: tops at row 5 and 14; interior rows are the three below each top.
         expectEqual(filled(calmCell, row: 6), 8)
-        expectEqual(filled(calmCell, row: 15), 16)
+        expectEqual(filled(calmCell, row: 15), 10)
 
         let hotCell = CreatureAppearance.limits([LimitMeter(label: "5h", usedPct: 95)], hovered: true)
         expectEqual(hotCell.tile, Tile(fill: .white(0.12), border: .danger))
