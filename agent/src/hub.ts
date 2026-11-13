@@ -3,16 +3,17 @@
  * about changes the panel can see, so a burst of identical hook events yields one message.
  */
 import { basename } from "node:path";
-import { DEFAULT_ICON, type AccountLimits, type PanelSession, type SessionIcon, type SessionUsage } from "../../shared/protocol.ts";
+import { DEFAULT_ICON, type AccountLimits, type DailySpend, type PanelSession, type SessionIcon, type SessionUsage } from "../../shared/protocol.ts";
 import { applyHookEvent, reconcile, type AgentEntry, type HookEvent, type SessionRecord } from "./state.ts";
-import type { Pin, Store } from "./store.ts";
+import { localDay, type Pin, type Store } from "./store.ts";
 import { liveLimits, type StatuslineReading } from "./usage.ts";
 
 export type HubChange =
   | { type: "session"; session: PanelSession }
   | { type: "removed"; id: string }
   | { type: "focus"; id: string | null }
-  | { type: "limits"; limits: AccountLimits };
+  | { type: "limits"; limits: AccountLimits }
+  | { type: "spend"; spend: DailySpend };
 export type HubListener = (change: HubChange) => void;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -68,6 +69,13 @@ export class SessionHub {
     return liveLimits(this.limits, this.now());
   }
 
+  /** What all sessions have cost today, or null while nothing has. */
+  currentSpend(): DailySpend | null {
+    const day = localDay(this.now());
+    const usd = this.store.spendOn(day);
+    return usd > 0 ? { day, usd } : null;
+  }
+
   /**
    * Records a statusline reading. A reading without `rate_limits` (a session billed by API key)
    * leaves the known limits alone. Usage for a session the hub hasn't seen yet is kept until it shows up.
@@ -78,6 +86,12 @@ export class SessionHub {
       this.usage.set(sessionId, usage);
       const rec = this.records.get(sessionId);
       if (rec) this.emit({ type: "session", session: this.toPanel(rec) });
+    }
+    if (usage.costUsd !== null) {
+      const day = localDay(this.now());
+      const before = this.store.spendOn(day);
+      const usd = this.store.recordCost(sessionId, day, usage.costUsd, this.now());
+      if (usd !== before) this.emit({ type: "spend", spend: { day, usd } });
     }
     if (limits && !sameLimits(this.limits, limits)) {
       this.limits = limits;
@@ -120,6 +134,7 @@ export class SessionHub {
 
   /** Forgets ended, unpinned sessions whose state is older than `maxAgeMs`. */
   prune(maxAgeMs = DAY_MS) {
+    this.store.pruneSpend(this.now(), 14 * DAY_MS);
     const cutoff = this.now() - maxAgeMs;
     for (const rec of this.records.values()) {
       if (rec.state === "ended" && !this.pins.has(rec.id) && rec.stateSince < cutoff) {

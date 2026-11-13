@@ -181,6 +181,7 @@ test("statusline readings reach the panel as session usage and account limits", 
   const res = await fetch(statuslineUrl(), { method: "POST", body: statusline() });
   expect(res.status).toBe(204);
   expect(await next()).toMatchObject({ type: "session", session: { id: ID, usage: { costUsd: 1.25, contextPct: 3 } } });
+  expect(await next()).toMatchObject({ type: "spend", spend: { usd: 1.25 } });
   expect(await next()).toMatchObject({ type: "limits", limits: { fiveHour: { usedPct: 44, resetsAt: 4_000_000_000_000 }, sevenDay: null } });
   ws.close();
 });
@@ -190,6 +191,7 @@ test("a panel that connects later gets the known limits right after the snapshot
   const { ws, next } = await connect();
   expect(await next()).toMatchObject({ type: "snapshot" });
   expect(await next()).toMatchObject({ type: "limits", limits: { fiveHour: { usedPct: 44 } } });
+  expect(await next()).toMatchObject({ type: "spend", spend: { usd: 1.25 } });
   ws.close();
 });
 

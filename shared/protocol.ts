@@ -63,6 +63,13 @@ export interface AccountLimits {
   updatedAt: number;
 }
 
+/** What every session together has cost on one local calendar day. */
+export interface DailySpend {
+  /** Local date, YYYY-MM-DD. */
+  day: string;
+  usd: number;
+}
+
 export interface PanelSession {
   id: string;
   name: string;
@@ -99,6 +106,7 @@ export type ServerMessage =
   | { type: "focus"; id: string | null } // the session in front in the desktop app; null when none
   | { type: "library"; sessions: LibraryEntry[] } // reply to a library request, most recent first
   | { type: "limits"; limits: AccountLimits } // sent after the snapshot once known, then on every change
+  | { type: "spend"; spend: DailySpend } // sent after the limits once above zero, then on every change
   | { type: "error"; message: string };
 
 /** `pin` and `icon` also accept a desktop session that isn't running: the agent starts tracking it. */

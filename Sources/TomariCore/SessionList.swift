@@ -5,6 +5,8 @@ public struct SessionList: Equatable, Sendable {
     public private(set) var focusedId: String?
     /// The account's limits as last reported; a snapshot doesn't clear them, the agent resends on connect.
     public private(set) var limits: AccountLimits?
+    /// Today's total cost as last reported; the agent resends it on connect.
+    public private(set) var spend: DailySpend?
 
     public init() {}
 
@@ -21,6 +23,8 @@ public struct SessionList: Equatable, Sendable {
             focusedId = id
         case .limits(let latest):
             limits = latest
+        case .spend(let latest):
+            spend = latest
         case .error, .library:
             break
         }

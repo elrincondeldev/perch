@@ -11,7 +11,7 @@ import { Store } from "./store.ts";
 /** What a release ships next to the `tomari` binary, and setup copies into BIN_DIR. */
 const SHIPPED = ["tomari", "tomari-overlay", "Tomari_TomariCore.bundle"];
 
-export async function setup({ pi }: { pi: boolean }) {
+export async function setup({ pi, statusline }: { pi: boolean; statusline: boolean }) {
   const source = dirname(process.execPath);
   const missing = SHIPPED.filter((name) => !existsSync(`${source}/${name}`));
   if (missing.length > 0) {
@@ -35,7 +35,7 @@ export async function setup({ pi }: { pi: boolean }) {
   const store = new Store(config.dbPath);
   const imported = store.importPinsFrom(CLAUDE_PANEL_DB);
   store.close();
-  const hooksChanged = await writeHooks({ install: true });
+  const hooksChanged = await writeHooks({ install: true, statusline });
   // A strip started by hand would hold the single-instance lock, and the LaunchAgent's copy would quit.
   await $`pkill -x tomari-overlay`.quiet().nothrow();
   for (const job of jobs) await start(job);
@@ -44,7 +44,8 @@ export async function setup({ pi }: { pi: boolean }) {
   binaries : ${BIN_DIR}
   data     : ${DATA_DIR}
   logs     : ${LOG_DIR}
-  hooks    : ${hooksChanged ? "added to" : "already in"} ${CLAUDE_SETTINGS}`);
+  hooks    : ${hooksChanged ? "added to" : "already in"} ${CLAUDE_SETTINGS}
+  usage    : ${statusline ? "statusline sends cost, context and limits to Tomari" : "off (--no-statusline)"}`);
   if (migratedPerch) console.log("  moved your Perch install, with its pins, icons and token, into Tomari");
   if (replacedClaudePanel) console.log("  replaced claude-panel's agent (com.claude-panel.agent)");
   if (imported > 0) console.log(`  imported ${imported} pinned session${imported === 1 ? "" : "s"} from claude-panel`);

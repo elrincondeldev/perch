@@ -99,6 +99,8 @@ export function startServers({
         send(ws, { type: "snapshot", sessions: hub.snapshot(), focusedId: hub.focusedId });
         const limits = hub.currentLimits();
         if (limits) send(ws, { type: "limits", limits });
+        const spend = hub.currentSpend();
+        if (spend) send(ws, { type: "spend", spend });
       },
       async message(ws, raw) {
         const msg = parseClientMessage(String(raw));

@@ -197,6 +197,41 @@ describe("SessionHub statusline readings", () => {
     expect(hub.get(B)!.usage!.costUsd).toBe(0.5);
   });
 
+  test("today's spend adds up what each session cost since its last reading", () => {
+    const { hub, changes } = setup();
+    const cost = (id: string, usd: number) => hub.handleStatusline(reading(id, { cost: { total_cost_usd: usd } }));
+    expect(hub.currentSpend()).toBeNull();
+
+    cost(A, 0.5);
+    cost(A, 0.5);
+    cost(A, 0.75);
+    cost(B, 1);
+    expect(hub.currentSpend()!.usd).toBeCloseTo(1.75);
+    const spends = changes.flatMap((c) => (c.type === "spend" ? [c.spend.usd] : []));
+    expect(spends).toHaveLength(3);
+
+    // A session that starts over (cost drops) counts whole again.
+    cost(A, 0.25);
+    expect(hub.currentSpend()!.usd).toBeCloseTo(2);
+  });
+
+  test("spend survives a restart of the agent without counting a session twice", () => {
+    const path = `${tmpdir()}/tomari-spend-${Date.now()}.db`;
+    try {
+      const first = setup(new Store(path));
+      first.hub.handleStatusline(reading(A, { cost: { total_cost_usd: 2 } }));
+      first.store.close();
+
+      const second = setup(new Store(path));
+      expect(second.hub.currentSpend()!.usd).toBe(2);
+      second.hub.handleStatusline(reading(A, { cost: { total_cost_usd: 2.5 } }));
+      expect(second.hub.currentSpend()!.usd).toBeCloseTo(2.5);
+      second.store.close();
+    } finally {
+      for (const ext of ["", "-wal", "-shm"]) rmSync(path + ext, { force: true });
+    }
+  });
+
   test("limits are announced once per change and shared by every session", () => {
     const { hub, changes } = setup();
     hub.handleStatusline(reading(A));

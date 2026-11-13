@@ -75,3 +75,85 @@ func usageTests() {
         expectEqual(both.live(at: now + 6000), nil)
     }
 }
+
+func meterTests() {
+    test("a meter is calm below 70 %, warm from 70 %, hot from 90 %, judged on the rounded figure") {
+        expectEqual(LimitMeter(label: "5h", usedPct: 44).level, .ok)
+        expectEqual(LimitMeter(label: "5h", usedPct: 69.4).level, .ok)
+        expectEqual(LimitMeter(label: "5h", usedPct: 69.6).level, .warm)
+        expectEqual(LimitMeter(label: "5h", usedPct: 89.6).level, .hot)
+        expectEqual(LimitMeter(label: "5h", usedPct: 100).level, .hot)
+    }
+
+    test("a meter keeps its text and fill inside 0-100 %") {
+        let meter = LimitMeter(label: "7d", usedPct: 39)
+        expectEqual(meter.text, "39%")
+        expectEqual(meter.fraction, 0.39)
+        expectEqual(LimitMeter(label: "7d", usedPct: 250).fraction, 1)
+        expectEqual(LimitMeter(label: "7d", usedPct: -4).text, "0%")
+    }
+
+    test("an account has a meter for each window that hasn't reset, 5-hour first") {
+        let both = AccountLimits(
+            fiveHour: LimitWindow(usedPct: 44, resetsAt: now + 100), sevenDay: LimitWindow(usedPct: 39, resetsAt: now + 5000), updatedAt: now)
+        expectEqual(both.meters(at: now).map(\.label), ["5h", "7d"])
+        expectEqual(both.meters(at: now).map(\.text), ["44%", "39%"])
+        expectEqual(both.meters(at: now + 200).map(\.label), ["7d"])
+        expectEqual(both.meters(at: now + 6000).count, 0)
+    }
+}
+
+func spendTests() {
+    var utc = Calendar(identifier: .gregorian)
+    utc.timeZone = TimeZone(identifier: "UTC")!
+    // 2026-11-13 12:00 UTC
+    let noon = Date(timeIntervalSince1970: 1_794_571_200)
+
+    test("decodes today's spend, and the list keeps the latest") {
+        let json = #"{"type":"spend","spend":{"day":"2026-11-13","usd":3.2}}"#
+        guard case .spend(let spend)? = ServerMessage.parse(json) else { return expect(false, "not spend") }
+        expectEqual(spend, DailySpend(day: "2026-11-13", usd: 3.2))
+        expectEqual(ServerMessage.parse(#"{"type":"spend","spend":{"day":3}}"#), nil)
+
+        var list = SessionList()
+        expectEqual(list.spend, nil)
+        list.apply(.spend(spend))
+        list.apply(.snapshot(sessions: [], focusedId: nil))
+        expectEqual(list.spend, spend)
+    }
+
+    test("spend reads as today's, and not at all once the day has passed") {
+        let spend = DailySpend(day: "2026-11-13", usd: 3.2)
+        expectEqual(spend.line(at: noon, calendar: utc), "today · $3.20")
+        expectEqual(spend.line(at: noon + 86400, calendar: utc), nil)
+        expectEqual(DailySpend(day: "2026-11-13", usd: 0.004).line(at: noon, calendar: utc), "today · <$0.01")
+    }
+
+    test("the limits report lists windows, the session in front and today's spend") {
+        let limits = AccountLimits(
+            fiveHour: LimitWindow(usedPct: 44, resetsAt: noon + 7800), sevenDay: LimitWindow(usedPct: 39, resetsAt: noon + 3 * 86400 + 5 * 3600), updatedAt: noon)
+        let session = SessionUsage(costUsd: 0.5, contextPct: 7, inputTokens: 1000, outputTokens: 20)
+        let spend = DailySpend(day: "2026-11-13", usd: 3.2)
+        expectEqual(
+            LimitsReport.lines(limits: limits, session: session, spend: spend, at: noon, calendar: utc),
+            ["5h 44% · resets in 2h 10m", "7d 39% · resets in 3d 5h", "session · ctx 7% · 1k tok · $0.50", "today · $3.20"]
+        )
+        expectEqual(LimitsReport.lines(limits: nil, session: nil, spend: spend, at: noon, calendar: utc), ["today · $3.20"])
+        expectEqual(LimitsReport.lines(limits: nil, session: nil, spend: nil, at: noon, calendar: utc), [])
+    }
+
+    test("the limits cell draws a bar per window, filled to its share, and rings the tile when one is hot") {
+        func filled(_ a: CreatureAppearance, row: Int) -> Int { a.pixels[row].compactMap { $0 }.filter { $0 == RGB(r: 217, g: 217, b: 217) }.count }
+        let calmCell = CreatureAppearance.limits([LimitMeter(label: "5h", usedPct: 50), LimitMeter(label: "7d", usedPct: 100)], hovered: false)
+        expectEqual(calmCell.pixels.count, spriteSize)
+        expectEqual(calmCell.pixels[0].count, spriteSize)
+        expectEqual(calmCell.tile, Tile())
+        // Two bars: tops at row 5 and 14; interior rows are the three below each top.
+        expectEqual(filled(calmCell, row: 6), 8)
+        expectEqual(filled(calmCell, row: 15), 16)
+
+        let hotCell = CreatureAppearance.limits([LimitMeter(label: "5h", usedPct: 95)], hovered: true)
+        expectEqual(hotCell.tile, Tile(fill: .white(0.12), border: .danger))
+        expectEqual(CreatureAppearance.limits([], hovered: false).pixels.joined().compactMap { $0 }.count, 0)
+    }
+}

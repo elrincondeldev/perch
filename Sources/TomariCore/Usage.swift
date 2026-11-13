@@ -68,3 +68,60 @@ extension AccountLimits {
         return parts.joined(separator: " · ")
     }
 }
+
+/// One bar of the limits meter: how much of a window is used.
+public struct LimitMeter: Equatable, Sendable {
+    public enum Level: Sendable { case ok, warm, hot }
+
+    public var label: String
+    /// "44%"
+    public var text: String
+    /// 0...1
+    public var fraction: Double
+    /// From the rounded percentage, so the color always agrees with the text: warm from 70 %, hot from 90 %.
+    public var level: Level
+
+    public init(label: String, usedPct: Double) {
+        let pct = min(max(usedPct, 0), 100)
+        let shown = pct.rounded()
+        self.label = label
+        text = "\(Int(shown))%"
+        fraction = pct / 100
+        level = shown >= 90 ? .hot : shown >= 70 ? .warm : .ok
+    }
+}
+
+extension AccountLimits {
+    /// A bar for each window that hasn't reset yet, the 5-hour one first.
+    public func meters(at now: Date) -> [LimitMeter] {
+        guard let live = live(at: now) else { return [] }
+        var meters: [LimitMeter] = []
+        if let window = live.fiveHour { meters.append(LimitMeter(label: "5h", usedPct: window.usedPct)) }
+        if let window = live.sevenDay { meters.append(LimitMeter(label: "7d", usedPct: window.usedPct)) }
+        return meters
+    }
+}
+
+extension DailySpend {
+    /// "today · $3.20", or nil once the day it counts is no longer today.
+    public func line(at now: Date, calendar: Calendar = .current) -> String? {
+        let c = calendar.dateComponents([.year, .month, .day], from: now)
+        let today = String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+        return day == today ? "today · \(costText(usd))" : nil
+    }
+}
+
+public enum LimitsReport {
+    /// What the limits cell says on hover: each window with its reset time, the session in front, today's spend.
+    /// Empty when nothing is known.
+    public static func lines(limits: AccountLimits?, session: SessionUsage?, spend: DailySpend?, at now: Date, calendar: Calendar = .current) -> [String] {
+        var lines: [String] = []
+        if let live = limits?.live(at: now) {
+            if let window = live.fiveHour { lines.append(window.line("5h", at: now)) }
+            if let window = live.sevenDay { lines.append(window.line("7d", at: now)) }
+        }
+        if let line = session?.line { lines.append("session · \(line)") }
+        if let line = spend?.line(at: now, calendar: calendar) { lines.append(line) }
+        return lines
+    }
+}

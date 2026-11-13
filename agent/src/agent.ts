@@ -29,6 +29,7 @@ export async function runAgent({ lan }: { lan: boolean }) {
       const { fiveHour, sevenDay } = change.limits;
       return console.log(`${time}  limits → 5h ${fiveHour?.usedPct ?? "?"}%  7d ${sevenDay?.usedPct ?? "?"}%`);
     }
+    if (change.type === "spend") return console.log(`${time}  spend → $${change.spend.usd.toFixed(2)} on ${change.spend.day}`);
     if (change.type === "focus") return console.log(`${time}  focus → ${change.id ? hub.get(change.id)?.name ?? change.id : "none"}`);
     const s = change.session;
     const flags = `${s.live ? "" : " (not live)"}${s.pinned ? " ★" : ""}`;

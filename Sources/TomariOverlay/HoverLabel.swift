@@ -41,6 +41,8 @@ final class HoverLabel {
             field.maximumNumberOfLines = 1
             box.addSubview(field)
         }
+        usage.maximumNumberOfLines = 0
+        usage.lineBreakMode = .byClipping
         panel.contentView = box
         panel.ignoresMouseEvents = true
     }

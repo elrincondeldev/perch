@@ -74,6 +74,18 @@ public struct LimitWindow: Equatable, Sendable, Decodable {
     }
 }
 
+/// What every session together has cost on one local calendar day.
+public struct DailySpend: Equatable, Sendable, Decodable {
+    /// Local date, YYYY-MM-DD.
+    public var day: String
+    public var usd: Double
+
+    public init(day: String, usd: Double) {
+        self.day = day
+        self.usd = usd
+    }
+}
+
 /// The account's limits, shared by every session. A window is nil while Claude Code doesn't report it.
 public struct AccountLimits: Equatable, Sendable, Decodable {
     public var fiveHour: LimitWindow?
@@ -199,6 +211,8 @@ public enum ServerMessage: Equatable, Sendable {
     case library([LibraryEntry])
     /// The account's rate limits, sent after the snapshot once known and on every change.
     case limits(AccountLimits)
+    /// What all sessions have cost today, sent once above zero and on every change.
+    case spend(DailySpend)
 
     /// Nil for malformed or unknown messages.
     public static func parse(_ text: String) -> ServerMessage? {
@@ -221,6 +235,8 @@ public enum ServerMessage: Equatable, Sendable {
             return (try? decoder.decode(Library.self, from: data)).map { .library($0.sessions.compactMap(\.value)) }
         case "limits":
             return (try? decoder.decode(LimitsChange.self, from: data)).map { .limits($0.limits) }
+        case "spend":
+            return (try? decoder.decode(SpendChange.self, from: data)).map { .spend($0.spend) }
         default:
             return nil
         }
@@ -234,6 +250,7 @@ public enum ServerMessage: Equatable, Sendable {
     private struct Failure: Decodable { let message: String }
     private struct Library: Decodable { let sessions: [Lenient<LibraryEntry>] }
     private struct LimitsChange: Decodable { let limits: AccountLimits }
+    private struct SpendChange: Decodable { let spend: DailySpend }
 }
 
 /// Lets one unreadable session be skipped instead of failing the whole snapshot.
