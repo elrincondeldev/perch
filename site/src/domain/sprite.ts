@@ -24,6 +24,7 @@ const COLORS = {
   dotOff: "#4a4f5a",
   face: "#16171c",
   pink: "#ff8fb1",
+  white: "#ffffff",
   check: "#4cd964",
   eye: "#111216",
 } as const;
@@ -136,7 +137,7 @@ function bodyRows(character: CharacterTemplate, walking: boolean): readonly stri
 /** One frame of a character in a mood. Frames advance four times a second, as in the overlay. */
 export function spriteFrame(character: CharacterTemplate, color: Hex, mood: Mood, frame: number): Pixels {
   const p = pose(mood, frame);
-  const cells: Record<string, Hex> = { B: color, D: shaded(color, -0.35), L: shaded(color, 0.35), F: COLORS.face, P: COLORS.pink };
+  const cells: Record<string, Hex> = { B: color, D: shaded(color, -0.35), L: shaded(color, 0.35), F: COLORS.face, P: COLORS.pink, W: COLORS.white };
   const pixels: Pixels = Array.from({ length: SPRITE_SIZE }, () => Array<Hex | null>(SPRITE_SIZE).fill(null));
   const set = (x: number, y: number, c: Hex) => {
     if (x >= 0 && x < SPRITE_SIZE && y >= 0 && y < SPRITE_SIZE) pixels[y]![x] = c;

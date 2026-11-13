@@ -4,7 +4,7 @@ import Foundation
 public struct CharacterTemplate: Decodable, Sendable {
     public let id: String
     public let label: String
-    /// 16 rows of 16 cells: B body, D darker, L lighter, F face plate, P pink, "." empty.
+    /// 16 rows of 16 cells: B body, D darker, L lighter, F face plate, P pink, W white, "." empty.
     public let body: [String]
     /// Rows that replace the body from `row` down on alternate frames while working.
     public let walk: Walk?

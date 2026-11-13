@@ -71,7 +71,7 @@ The characters are 16×16 text templates in [`Sources/TomariCore/Resources/chara
 
 | Field | Meaning |
 |---|---|
-| `body` | 16 rows of 16 cells: `B` body (the session's color), `D` darker, `L` lighter, `F` face plate, `P` pink, `.` empty |
+| `body` | 16 rows of 16 cells: `B` body (the session's color), `D` darker, `L` lighter, `F` face plate, `P` pink, `W` white, `.` empty |
 | `walk` | Optional rows that replace the body from `row` down on alternate frames while the session works |
 | `eyes` | Top-left corners of the two 2×2 eyes, which blink, close and squint on their own |
 | `eyeColor` | Optional `#rrggbb` |

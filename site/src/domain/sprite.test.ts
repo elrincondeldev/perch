@@ -19,6 +19,14 @@ describe("spriteFrame", () => {
     expect(pixels[oy]![ox]).toBeNull();
   });
 
+  test("W cells are white whatever the session's color", () => {
+    const pou = characterNamed("pou");
+    expect(pou.id).toBe("pou");
+    for (const color of [clay, "#4f7cff"]) {
+      expect(spriteFrame(pou, color, "idle", 1).flat()).toContain("#ffffff");
+    }
+  });
+
   test("opens 2×2 eyes and blinks them shut on the first idle frame", () => {
     const eye = "#111216";
     const { y, left } = critter.eyes;

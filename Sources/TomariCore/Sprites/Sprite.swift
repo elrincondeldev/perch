@@ -49,6 +49,7 @@ public func spriteFrame(character characterId: String, color: RGB, mood: Mood, f
         "L": color.shaded(0.35),
         "F": Palette.face,
         "P": Palette.pink,
+        "W": Palette.white,
     ]
 
     var pixels = Pixels(repeating: Array(repeating: nil, count: spriteSize), count: spriteSize)
@@ -91,6 +92,7 @@ private enum Palette {
     static let dotOff = RGB(hex: "#4a4f5a")!
     static let face = RGB(hex: "#16171c")!
     static let pink = RGB(hex: "#ff8fb1")!
+    static let white = RGB(hex: "#ffffff")!
     static let check = RGB(hex: "#4cd964")!
     static let eye = RGB(hex: "#111216")!
 }
