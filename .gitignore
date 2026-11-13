@@ -1,5 +1,4 @@
 docs/
-CLAUDE.md
 .build/
 .swiftpm/
 node_modules/
