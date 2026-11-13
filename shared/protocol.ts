@@ -37,6 +37,32 @@ export interface SessionIcon {
 
 export const DEFAULT_ICON: SessionIcon = { character: "default", color: "#d97757" };
 
+/** What Claude Code's statusline reports for one session. Every field is null until a reading has it. */
+export interface SessionUsage {
+  /** Session cost so far, USD; the client's estimate. */
+  costUsd: number | null;
+  /** Share of the context window in use, 0-100. */
+  contextPct: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
+/** One rate-limit window of the account (Claude Pro/Max only). */
+export interface LimitWindow {
+  /** 0-100 */
+  usedPct: number;
+  /** Epoch ms when the window resets. */
+  resetsAt: number;
+}
+
+/** Account-wide limits, shared by every session. A window is null while Claude Code doesn't report it. */
+export interface AccountLimits {
+  fiveHour: LimitWindow | null;
+  sevenDay: LimitWindow | null;
+  /** Epoch ms of the reading. */
+  updatedAt: number;
+}
+
 export interface PanelSession {
   id: string;
   name: string;
@@ -52,6 +78,8 @@ export interface PanelSession {
   /** Order among pinned sessions; null when not pinned. */
   position: number | null;
   icon: SessionIcon;
+  /** Optional: absent until the statusline has reported, and for clients that predate it. */
+  usage?: SessionUsage;
 }
 
 /** A desktop-app session the panel can pin, running or not. */
@@ -70,6 +98,7 @@ export type ServerMessage =
   | { type: "removed"; id: string }
   | { type: "focus"; id: string | null } // the session in front in the desktop app; null when none
   | { type: "library"; sessions: LibraryEntry[] } // reply to a library request, most recent first
+  | { type: "limits"; limits: AccountLimits } // sent after the snapshot once known, then on every change
   | { type: "error"; message: string };
 
 /** `pin` and `icon` also accept a desktop session that isn't running: the agent starts tracking it. */

@@ -162,3 +162,42 @@ test("planOpen: deep link for desktop sessions (running or not), refuse terminal
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+const statuslineUrl = () => `http://127.0.0.1:${servers.hookServer.port}/statusline`;
+const statusline = (extra: Record<string, unknown> = {}) =>
+  JSON.stringify({
+    session_id: ID,
+    cost: { total_cost_usd: 1.25 },
+    context_window: { total_input_tokens: 500, total_output_tokens: 10, used_percentage: 3 },
+    rate_limits: { five_hour: { used_percentage: 44, resets_at: 4_000_000_000 } },
+    ...extra,
+  });
+
+test("statusline readings reach the panel as session usage and account limits", async () => {
+  await postHook({ hook_event_name: "Stop", session_id: ID, cwd: "/tmp/demo" });
+  const { ws, next } = await connect();
+  await next(); // snapshot, no limits known yet
+
+  const res = await fetch(statuslineUrl(), { method: "POST", body: statusline() });
+  expect(res.status).toBe(204);
+  expect(await next()).toMatchObject({ type: "session", session: { id: ID, usage: { costUsd: 1.25, contextPct: 3 } } });
+  expect(await next()).toMatchObject({ type: "limits", limits: { fiveHour: { usedPct: 44, resetsAt: 4_000_000_000_000 }, sevenDay: null } });
+  ws.close();
+});
+
+test("a panel that connects later gets the known limits right after the snapshot", async () => {
+  await fetch(statuslineUrl(), { method: "POST", body: statusline() });
+  const { ws, next } = await connect();
+  expect(await next()).toMatchObject({ type: "snapshot" });
+  expect(await next()).toMatchObject({ type: "limits", limits: { fiveHour: { usedPct: 44 } } });
+  ws.close();
+});
+
+test("bad or oversized statusline bodies are refused, and the network-facing port has no such route", async () => {
+  expect((await fetch(statuslineUrl(), { method: "POST", body: "nope" })).status).toBe(400);
+  expect((await fetch(statuslineUrl(), { method: "POST", body: statusline({ session_id: "x" }) })).status).toBe(400);
+  expect((await fetch(statuslineUrl(), { method: "POST", body: "x".repeat(70 * 1024) })).status).toBe(413);
+  expect((await fetch(statuslineUrl())).status).toBe(404);
+  const res = await fetch(`${panelHttp()}/statusline`, { method: "POST", body: statusline() });
+  expect(res.status).toBe(404);
+});

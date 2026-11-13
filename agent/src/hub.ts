@@ -3,14 +3,16 @@
  * about changes the panel can see, so a burst of identical hook events yields one message.
  */
 import { basename } from "node:path";
-import { DEFAULT_ICON, type PanelSession, type SessionIcon } from "../../shared/protocol.ts";
+import { DEFAULT_ICON, type AccountLimits, type PanelSession, type SessionIcon, type SessionUsage } from "../../shared/protocol.ts";
 import { applyHookEvent, reconcile, type AgentEntry, type HookEvent, type SessionRecord } from "./state.ts";
 import type { Pin, Store } from "./store.ts";
+import { liveLimits, type StatuslineReading } from "./usage.ts";
 
 export type HubChange =
   | { type: "session"; session: PanelSession }
   | { type: "removed"; id: string }
-  | { type: "focus"; id: string | null };
+  | { type: "focus"; id: string | null }
+  | { type: "limits"; limits: AccountLimits };
 export type HubListener = (change: HubChange) => void;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -20,6 +22,9 @@ export class SessionHub {
   private records = new Map<string, SessionRecord>();
   private pins: Map<string, Pin>;
   private listeners = new Set<HubListener>();
+  /** Latest statusline reading per session, and the account's limits. In memory only: both go stale within hours. */
+  private usage = new Map<string, SessionUsage>();
+  private limits: AccountLimits | null = null;
   /** Session in front in the desktop app; not persisted. */
   focusedId: string | null = null;
 
@@ -56,6 +61,28 @@ export class SessionHub {
 
   handleAgents(agents: AgentEntry[]) {
     for (const rec of reconcile(this.records, agents, this.now())) this.commit(rec);
+  }
+
+  /** Account limits that haven't reset yet, or null when none is known. */
+  currentLimits(): AccountLimits | null {
+    return liveLimits(this.limits, this.now());
+  }
+
+  /**
+   * Records a statusline reading. A reading without `rate_limits` (a session billed by API key)
+   * leaves the known limits alone. Usage for a session the hub hasn't seen yet is kept until it shows up.
+   */
+  handleStatusline(reading: StatuslineReading) {
+    const { sessionId, usage, limits } = reading;
+    if (!sameValues(this.usage.get(sessionId), usage)) {
+      this.usage.set(sessionId, usage);
+      const rec = this.records.get(sessionId);
+      if (rec) this.emit({ type: "session", session: this.toPanel(rec) });
+    }
+    if (limits && !sameLimits(this.limits, limits)) {
+      this.limits = limits;
+      this.emit({ type: "limits", limits });
+    }
   }
 
   /** Starts tracking a session that is not running, e.g. a desktop session about to be pinned. No-op if known. */
@@ -98,6 +125,7 @@ export class SessionHub {
       if (rec.state === "ended" && !this.pins.has(rec.id) && rec.stateSince < cutoff) {
         this.records.delete(rec.id);
         this.store.deleteSession(rec.id);
+        this.usage.delete(rec.id);
         this.emit({ type: "removed", id: rec.id });
       }
     }
@@ -118,6 +146,7 @@ export class SessionHub {
 
   private toPanel(rec: SessionRecord): PanelSession {
     const pin = this.pins.get(rec.id);
+    const usage = this.usage.get(rec.id);
     return {
       id: rec.id,
       name: rec.name ?? basename(rec.cwd),
@@ -129,6 +158,18 @@ export class SessionHub {
       pinned: pin !== undefined,
       position: pin?.position ?? null,
       icon: pin?.icon ?? DEFAULT_ICON,
+      ...(usage ? { usage } : {}),
     };
   }
+}
+
+function sameValues<T extends object>(a: T | undefined, b: T) {
+  return a !== undefined && (Object.keys(b) as (keyof T)[]).every((k) => a[k] === b[k]);
+}
+
+/** Ignores `updatedAt`, so a repeated reading isn't announced again. */
+function sameLimits(a: AccountLimits | null, b: AccountLimits) {
+  const sameWindow = (x: AccountLimits["fiveHour"], y: AccountLimits["fiveHour"]) =>
+    x === y || (x !== null && y !== null && x.usedPct === y.usedPct && x.resetsAt === y.resetsAt);
+  return a !== null && sameWindow(a.fiveHour, b.fiveHour) && sameWindow(a.sevenDay, b.sevenDay);
 }

@@ -25,6 +25,10 @@ export async function runAgent({ lan }: { lan: boolean }) {
   hub.subscribe((change) => {
     const time = new Date().toLocaleTimeString("en-GB", { hour12: false });
     if (change.type === "removed") return console.log(`${time}  ${change.id.slice(0, 8)}  removed`);
+    if (change.type === "limits") {
+      const { fiveHour, sevenDay } = change.limits;
+      return console.log(`${time}  limits → 5h ${fiveHour?.usedPct ?? "?"}%  7d ${sevenDay?.usedPct ?? "?"}%`);
+    }
     if (change.type === "focus") return console.log(`${time}  focus → ${change.id ? hub.get(change.id)?.name ?? change.id : "none"}`);
     const s = change.session;
     const flags = `${s.live ? "" : " (not live)"}${s.pinned ? " ★" : ""}`;

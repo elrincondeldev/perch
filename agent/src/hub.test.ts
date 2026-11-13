@@ -5,6 +5,7 @@ import { SessionHub, type HubChange } from "./hub.ts";
 import { parseClientMessage } from "./protocol-guard.ts";
 import type { HookEvent } from "./state.ts";
 import { Store } from "./store.ts";
+import { parseStatusline } from "./usage.ts";
 
 const A = "0603472f-b7c5-4dae-b7a1-142468264b30";
 const B = "34446bd8-9f71-4831-9f0b-d6094803dee2";
@@ -152,5 +153,73 @@ describe("parseClientMessage", () => {
       JSON.stringify({ type: "icon", id: A, icon: { character: "../etc", color: "#fff" } }),
     ];
     for (const raw of bad) expect(parseClientMessage(raw)).toBeNull();
+  });
+});
+
+describe("SessionHub statusline readings", () => {
+  const reading = (id: string, extra: Record<string, unknown> = {}, now = 1_000_000) =>
+    parseStatusline(
+      JSON.stringify({
+        session_id: id,
+        cost: { total_cost_usd: 0.5 },
+        context_window: { total_input_tokens: 1000, total_output_tokens: 20, used_percentage: 7 },
+        rate_limits: { five_hour: { used_percentage: 40, resets_at: 2000 }, seven_day: { used_percentage: 30, resets_at: 9000 } },
+        ...extra,
+      }),
+      now,
+    )!;
+
+  test("usage reaches the session, and an identical reading is not announced again", () => {
+    const { hub, changes } = setup();
+    hub.handleHook(ev(A, "Stop"));
+    changes.length = 0;
+
+    hub.handleStatusline(reading(A));
+    hub.handleStatusline(reading(A));
+    expect(hub.get(A)!.usage).toEqual({ costUsd: 0.5, contextPct: 7, inputTokens: 1000, outputTokens: 20 });
+    expect(changes.filter((c) => c.type === "session")).toHaveLength(1);
+
+    hub.handleStatusline(reading(A, { cost: { total_cost_usd: 0.6 } }));
+    expect(hub.get(A)!.usage!.costUsd).toBe(0.6);
+  });
+
+  test("a session without a reading has no usage key at all", () => {
+    const { hub } = setup();
+    hub.handleHook(ev(A, "Stop"));
+    expect("usage" in hub.get(A)!).toBe(false);
+  });
+
+  test("a reading that arrives before the session is kept for when its first hook does", () => {
+    const { hub, changes } = setup();
+    hub.handleStatusline(reading(B));
+    expect(changes.filter((c) => c.type === "session")).toHaveLength(0);
+    hub.handleHook(ev(B, "UserPromptSubmit"));
+    expect(hub.get(B)!.usage!.costUsd).toBe(0.5);
+  });
+
+  test("limits are announced once per change and shared by every session", () => {
+    const { hub, changes } = setup();
+    hub.handleStatusline(reading(A));
+    hub.handleStatusline(reading(B));
+    expect(changes.filter((c) => c.type === "limits")).toHaveLength(1);
+
+    hub.handleStatusline(reading(A, { rate_limits: { five_hour: { used_percentage: 41, resets_at: 2000 }, seven_day: { used_percentage: 30, resets_at: 9000 } } }));
+    expect(changes.filter((c) => c.type === "limits")).toHaveLength(2);
+    expect(hub.currentLimits()).toMatchObject({ fiveHour: { usedPct: 41 }, sevenDay: { usedPct: 30 } });
+  });
+
+  test("a reading without rate_limits leaves the known limits alone", () => {
+    const { hub } = setup();
+    hub.handleStatusline(reading(A));
+    hub.handleStatusline(reading(B, { rate_limits: undefined }));
+    expect(hub.currentLimits()).toMatchObject({ fiveHour: { usedPct: 40 } });
+  });
+
+  test("windows that have reset are no longer reported", () => {
+    const { hub, tick } = setup(undefined, 1_000_000);
+    hub.handleStatusline(reading(A, { rate_limits: { five_hour: { used_percentage: 40, resets_at: 1_001 }, seven_day: { used_percentage: 30, resets_at: 1_005 } } }));
+    expect(hub.currentLimits()).not.toBeNull();
+    tick(2_000_000); // now = 3_000_000 ms, past both resets (1_001_000 and 1_005_000 ms)
+    expect(hub.currentLimits()).toBeNull();
   });
 });
