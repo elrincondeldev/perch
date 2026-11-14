@@ -37,7 +37,7 @@ You need the Claude desktop app (sessions in its Code tab), the Claude Code CLI 
 - **One creature per session**, animated by its state: working, needs permission, asking you, compacting, done, error or closed. Finished sessions fall asleep after five minutes.
 - **Hard to miss when it needs you**: a permission request blinks the creature's tile in orange; a question rings it in orange. A working creature hops with typing dots over its head, and one that finished its turn holds up a green check, ringed in green, until you reply or it falls asleep.
 - **Hover** for the session's name and status, e.g. `Bash: npm test` or `done · 5m`.
-- **Click** to open the session in the Claude desktop app, even one the app has stopped. A session running in Terminal.app brings its tab to the front instead. Without the desktop app, a closed session resumes with `claude --resume` in a new Terminal tab, in the folder where it ran. The session in front is ringed in white.
+- **Click** to open the session in the Claude desktop app, even one the app has stopped. A session running in Terminal.app brings its tab to the front instead. A closed session the desktop app doesn't know was born in a terminal, so it resumes there with `claude --resume` in a new Terminal tab, in the folder where it ran, whether or not the app is installed. The session in front is ringed in white.
 - **Which session is in front**: while Terminal is in front, the selected Terminal tab decides; while the Claude desktop app is in front, the session it shows does; with any other app in front the ring stays where it was. The first time Terminal is in front, macOS asks to let Tomari control Terminal, which it uses to read which tab is selected; Tomari doesn't ask Terminal anything while another app is in front.
 - **Background sessions** (`claude --bg`) run in a terminal the Claude daemon owns, so clicking one attaches it with `claude attach` in a new Terminal tab. Right-click one and choose **Stop session** to run `claude stop` (it asks first if the session is busy); the conversation is kept.
 - **Right-click** (or control-click) to pin or unpin the session and pick its character and color.
@@ -60,7 +60,7 @@ claude agents ─ poll ─▶  └ SQLite: pins, icons
 |---|---|---|
 | Hooks in `~/.claude/settings.json` | Instant state changes | Yes |
 | `claude agents --json` | Names, who is alive, corrections for missed hooks | Yes |
-| `claude --desktop --resume <id>` | Opening a session the desktop app doesn't know; without the app, `claude --resume <id>` in a new Terminal tab | Yes |
+| `claude --resume <id>` in a new Terminal tab | Reopening a closed session the desktop app doesn't know | Yes |
 | `claude://code/continue?session=local_…` | Opening any desktop-app session, running or stopped | No |
 | `~/Library/Application Support/Claude/claude-code-sessions/` | The app's sessions, and their `local_…` ids | No |
 | `setFocusedSession` in `~/Library/Logs/Claude/main.log` | Which session is in front | No |

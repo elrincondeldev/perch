@@ -87,12 +87,12 @@ test("an odd folder name reaches the script only as argv", async () => {
   for (const part of ["it's", "odd", "pwned", "rm -rf"]) expect(plan.command[2]).not.toContain(part);
 });
 
-test("with the desktop app, a closed session still opens there", async () => {
+test("with the desktop app installed, a closed session it doesn't know resumes in Terminal, where it was born", async () => {
   mkdirSync(desktopDir);
-  expect(await planOpen(CLOSED, { liveDir, desktopDir, cwd: "/Users/dev/project" })).toEqual({
-    ok: true,
-    command: ["claude", "--desktop", "--resume", CLOSED],
-  });
+  const plan = await planOpen(CLOSED, { liveDir, desktopDir, cwd: "/Users/dev/project" });
+  if (!plan.ok) throw new Error(plan.error);
+  expect(plan.command[0]).toBe("osascript");
+  expect(plan.command.slice(-2)).toEqual(["/Users/dev/project", CLOSED]);
 });
 
 test("a resumed session maps to its running pid, not the dead one left behind", async () => {
