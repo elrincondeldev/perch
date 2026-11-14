@@ -117,8 +117,8 @@ final class AgentLink {
     /// Called before `parsed` is applied, so the list still holds the session as it was.
     private func chimeIfFinished(_ parsed: ServerMessage) {
         guard Preferences.soundWhenDone, case .session(let session) = parsed else { return }
-        let terminalFront = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Terminal"
-        if doneChime.shouldChime(for: parsed, previous: list.sessions[session.id], focusedId: list.focusedId, terminalFrontmost: terminalFront, at: Date()) {
+        let front = FrontAppKind(bundleId: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+        if doneChime.shouldChime(for: parsed, previous: list.sessions[session.id], focusedId: list.focusedId, frontApp: front, at: Date()) {
             NSSound(named: "Glass")?.play()
         }
     }

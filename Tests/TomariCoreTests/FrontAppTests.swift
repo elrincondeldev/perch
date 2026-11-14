@@ -10,6 +10,12 @@ func frontAppTests() {
         expectEqual(FrontAppKind(bundleId: nil), .other)
     }
 
+    test("Terminal and the Claude desktop app show sessions, other apps do not") {
+        expect(FrontAppKind.terminal.showsSessions, "terminal")
+        expect(FrontAppKind.desktop.showsSessions, "desktop")
+        expect(!FrontAppKind.other.showsSessions, "other")
+    }
+
     test("the reporter sends the first kind and then only changes") {
         var reporter = FrontAppReporter()
         expectEqual(reporter.next(.other), .other)
