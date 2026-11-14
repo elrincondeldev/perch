@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { ttyResolver, watchTerminalFocus } from "./terminal-focus.ts";
+import { parseTerminalOutput, sessionsInTabs, ttyResolver, watchTerminalFocus } from "./terminal-focus.ts";
 
 const A = "0603472f-b7c5-4dae-b7a1-142468264b30";
 const B = "34446bd8-9f71-4831-9f0b-d6094803dee2";
@@ -257,6 +257,45 @@ test("the tty wins over the title, and an exact or unknown title is handled", as
     front.line = "/dev/ttys099\t◑ nobody"; // matches nothing: focus stays
     await Bun.sleep(40);
     expect(seen).toEqual([A, B]);
+  } finally {
+    stop();
+  }
+});
+
+test("the script output is the front tab, then the custom title of every tab", () => {
+  expect(parseTerminalOutput("")).toEqual({ front: null, titles: [] });
+  expect(parseTerminalOutput("/dev/ttys001\t◑ one\n◑ one\n\n✳ two")).toEqual({
+    front: { tty: "/dev/ttys001", title: "◑ one" },
+    titles: ["◑ one", "✳ two"],
+  });
+  expect(parseTerminalOutput("/dev/ttys001\t")).toEqual({ front: { tty: "/dev/ttys001", title: "" }, titles: [] });
+  // the front tab could not be read: its line is empty, the titles still count
+  expect(parseTerminalOutput("\n◑ one")).toEqual({ front: null, titles: ["◑ one"] });
+});
+
+test("tab titles are matched to background sessions with or without the status glyph", () => {
+  const sessions = [
+    { id: A, title: "perch work", background: true },
+    { id: B, title: "other", background: true },
+    { id: "c", title: null, background: true }, // untitled: never matches
+    { id: "d", title: "perch work", background: false }, // not a background session: never marked
+  ];
+  expect([...sessionsInTabs(["◑ perch work", "plain"], sessions)]).toEqual([A]);
+  expect([...sessionsInTabs(["other", ""], sessions)]).toEqual([B]);
+  expect(sessionsInTabs(["", "◑ "], sessions).size).toBe(0);
+});
+
+test("every tab list is handed to onTabs, and nothing when Terminal is not in front", async () => {
+  const lists: string[][] = [];
+  const { front, stop } = setup({ onTabs: (titles) => lists.push(titles) });
+  try {
+    front.line = "/dev/ttys001\t◑ a\n◑ a\n◑ b";
+    await waitFor(() => lists.some((l) => l.length === 2));
+    front.line = "";
+    const count = lists.length;
+    await Bun.sleep(40);
+    expect(lists.length).toBe(count);
+    expect(lists.at(-1)).toEqual(["◑ a", "◑ b"]);
   } finally {
     stop();
   }

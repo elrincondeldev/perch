@@ -1,4 +1,4 @@
-import { PANEL_PORT } from "../../shared/protocol.ts";
+import { BACKGROUND_KIND, PANEL_PORT } from "../../shared/protocol.ts";
 import { HOOK_PORT, loadConfig } from "./config.ts";
 import { watchDesktopFocus } from "./desktop-focus.ts";
 import { FocusArbiter } from "./focus-arbiter.ts";
@@ -8,7 +8,7 @@ import { startPoller } from "./poller.ts";
 import { startServers } from "./server.ts";
 import { Store } from "./store.ts";
 import { firstPrompt } from "./transcript.ts";
-import { watchTerminalFocus } from "./terminal-focus.ts";
+import { sessionsInTabs, watchTerminalFocus } from "./terminal-focus.ts";
 
 /** Runs until SIGINT or SIGTERM. */
 export async function runAgent() {
@@ -33,6 +33,14 @@ export async function runAgent() {
     wakeOn: (wake) => front.subscribe((app) => app === "terminal" && wake()),
     alive: (id) => hub.get(id)?.live ?? false,
     current: () => hub.focusedId,
+    // Which background sessions have a tab, so the overlay's jump can visit them.
+    onTabs: (titles) =>
+      hub.setTabbed(
+        sessionsInTabs(
+          titles,
+          hub.snapshot().filter((s) => s.live).map((s) => ({ id: s.id, title: hub.titleOf(s.id), background: s.kind === BACKGROUND_KIND })),
+        ),
+      ),
     // A tab on a background session runs a client whose tty is not the session's: match by the tab's title.
     sessionForTitle: (name) => {
       const matches = hub.snapshot().filter((s) => s.live && hub.titleOf(s.id) === name);

@@ -30,6 +30,8 @@ export class SessionHub {
   private lookedUp = new Set<string>();
   /** Sessions stopped from the panel → when the poll may list them again; in memory only. */
   private stoppedUntil = new Map<string, number>();
+  /** Background sessions shown in some Terminal tab; in memory only. */
+  private tabbed = new Set<string>();
   /** The label the panel last saw for each session. */
   private labels = new Map<string, string>();
   /** Session in front in the terminal or desktop app; not persisted. */
@@ -139,6 +141,13 @@ export class SessionHub {
   /** The session's real title, or null if it has none: unlike `get(id).name`, never the display label. */
   titleOf(id: string): string | null {
     return this.records.get(id)?.name ?? null;
+  }
+
+  /** Replaces the set of sessions shown in a tab; announces only the background sessions whose flag changed. */
+  setTabbed(ids: ReadonlySet<string>) {
+    const changed = [...new Set([...this.tabbed, ...ids])].filter((id) => this.tabbed.has(id) !== ids.has(id));
+    this.tabbed = new Set(ids);
+    for (const id of changed) if (this.records.get(id)?.kind === BACKGROUND_KIND) this.emitSession(id);
   }
 
   /** False if the session is unknown. */
@@ -292,6 +301,7 @@ export class SessionHub {
       position: pin?.position ?? null,
       icon: pin?.icon ?? DEFAULT_ICON,
       ...(rec.kind ? { kind: rec.kind } : {}),
+      ...(rec.kind === BACKGROUND_KIND ? { inTab: this.tabbed.has(rec.id) } : {}),
     };
   }
 }

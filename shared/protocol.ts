@@ -55,6 +55,11 @@ export interface PanelSession {
    * Absent until the poll has seen the session. Clients must treat other values as unknown.
    */
   kind?: SessionKind;
+  /**
+   * Background sessions only: whether a Terminal tab shows the session, so opening it focuses that tab
+   * instead of attaching a new one. Absent for other sessions; clients must treat absence as unknown.
+   */
+  inTab?: boolean;
 }
 
 /** A desktop-app session the panel can pin, running or not. */

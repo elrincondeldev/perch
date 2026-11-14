@@ -67,11 +67,24 @@ func waitingJumpTests() {
         expectEqual(WaitingJump.target(in: [justDone, asking], focusedId: nil), asking.id)
     }
 
-    test("the finished fallback skips background sessions, which would open a new tab") {
-        let background = session(state: .done, stateSince: now - 10, kind: "background")
+    test("the finished fallback skips background sessions with no tab, which would open a new one") {
+        let background = session(state: .done, stateSince: now - 10, kind: "background", inTab: false)
+        let unknown = session(state: .done, stateSince: now - 20, kind: "background")
         let terminal = session(state: .done, stateSince: now - 600)
-        expectEqual(WaitingJump.target(in: [background, terminal], focusedId: nil), terminal.id)
-        expect(WaitingJump.target(in: [background], focusedId: nil) == nil, "only background")
+        expectEqual(WaitingJump.target(in: [background, unknown, terminal], focusedId: nil), terminal.id)
+        expect(WaitingJump.target(in: [background, unknown], focusedId: nil) == nil, "only untabbed background")
+    }
+
+    test("the finished fallback includes a background session shown in a tab") {
+        let tabbed = session(state: .done, stateSince: now - 10, kind: "background", inTab: true)
+        let terminal = session(state: .done, stateSince: now - 600)
+        expectEqual(WaitingJump.target(in: [terminal, tabbed], focusedId: nil), tabbed.id)
+        expectEqual(WaitingJump.target(in: [terminal, tabbed], focusedId: tabbed.id), terminal.id)
+    }
+
+    test("a tabbed background session that is still working is not a finished target") {
+        let busy = session(state: .working, kind: "background", inTab: true)
+        expect(WaitingJump.target(in: [busy], focusedId: nil) == nil, "working")
     }
 
     test("a waiting background session is still a target") {

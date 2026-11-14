@@ -107,6 +107,18 @@ func protocolTests() {
         expectEqual(b.kind, nil)
     }
 
+    test("decodes inTab, tolerating its absence and a wrong type") {
+        func decode(_ extra: String) -> PanelSession? {
+            let json = sessionJSON.replacingOccurrences(of: #""icon":"#, with: extra + #""icon":"#)
+            guard case .session(let s)? = ServerMessage.parse(#"{"type":"session","session":\#(json)}"#) else { return nil }
+            return s
+        }
+        expectEqual(decode(#""inTab":true,"#)?.inTab, true)
+        expectEqual(decode(#""inTab":false,"#)?.inTab, false)
+        expectEqual(decode("")?.inTab, nil)
+        expectEqual(decode(#""inTab":"yes","#)?.inTab, nil)
+    }
+
     test("only a live background session can be stopped, and an active one asks first") {
         expectEqual(session(live: true, kind: "background").canStop, true)
         expectEqual(session(live: false, kind: "background").canStop, false)
