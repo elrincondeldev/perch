@@ -45,10 +45,10 @@ extension PanelSession {
 
     public func statusLine(at now: Date) -> String {
         switch state {
-        case .working: return activity ?? "working"
-        case .needsPermission: return "needs permission"
-        case .needsInput: return activity ?? "waiting for you"
-        case .compacting: return "compacting"
+        case .working: return "\(activity ?? "working") · \(elapsed(since: stateSince, now: now))"
+        case .needsPermission: return "needs permission · \(elapsed(since: stateSince, now: now))"
+        case .needsInput: return "\(activity ?? "waiting for you") · \(elapsed(since: stateSince, now: now))"
+        case .compacting: return "compacting · \(elapsed(since: stateSince, now: now))"
         case .error: return activity.map { "error · \($0)" } ?? "error"
         case .idle, .done: return "\(state.rawValue) · \(ago(since: stateSince, now: now))"
         case .ended: return "closed · \(ago(since: stateSince, now: now))"
@@ -75,5 +75,21 @@ public func ago(since: Date, now: Date) -> String {
     case ..<3600: return "\(s / 60)m"
     case ..<86400: return "\(s / 3600)h"
     default: return "\(s / 86400)d"
+    }
+}
+
+/// How long something has lasted, compact: "<1m", "4m", "1h 5m", "1d 3h".
+public func elapsed(since: Date, now: Date) -> String {
+    let minutes = max(0, Int(now.timeIntervalSince(since))) / 60
+    switch minutes {
+    case 0: return "<1m"
+    case ..<60: return "\(minutes)m"
+    case ..<1440:
+        let (h, m) = minutes.quotientAndRemainder(dividingBy: 60)
+        return m == 0 ? "\(h)h" : "\(h)h \(m)m"
+    default:
+        let (d, rest) = minutes.quotientAndRemainder(dividingBy: 1440)
+        let h = rest / 60
+        return h == 0 ? "\(d)d" : "\(d)d \(h)h"
     }
 }
