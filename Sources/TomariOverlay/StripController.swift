@@ -53,6 +53,11 @@ final class StripController {
         }
     }
 
+    /// Draws the strip again now, for a preference that changed.
+    func refresh() {
+        render()
+    }
+
     private func relayout() {
         shown = link.list.shown(at: Date())
         // The screen with the menu bar.
@@ -82,8 +87,9 @@ final class StripController {
         let frame = Int(now.timeIntervalSinceReferenceDate * Self.framesPerSecond)
         if !collapsed {
             let focusedId = link.list.focusedId
+            let byProject = Preferences.colorByProject
             view.show(shown.map {
-                CreatureAppearance(session: $0, focused: $0.id == focusedId, hovered: hovered == .session($0.id), frame: frame, now: now)
+                CreatureAppearance(session: $0.coloredByProject(byProject), focused: $0.id == focusedId, hovered: hovered == .session($0.id), frame: frame, now: now)
             } + [CreatureAppearance.addButton(hovered: hovered == .add)])
         }
         view.showTab(CreatureAppearance.tab(for: shown, collapsed: collapsed, edge: edge, hovered: hovered == .tab, frame: frame, now: now))
@@ -225,5 +231,11 @@ enum Preferences {
     static var soundWhenDone: Bool {
         get { store.bool(forKey: "soundWhenDone") }
         set { store.set(newValue, forKey: "soundWhenDone") }
+    }
+
+    /// Sessions that still have the default color take one derived from their project; off until the user turns it on.
+    static var colorByProject: Bool {
+        get { store.bool(forKey: "colorByProject") }
+        set { store.set(newValue, forKey: "colorByProject") }
     }
 }

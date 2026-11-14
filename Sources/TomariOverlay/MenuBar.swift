@@ -46,6 +46,10 @@ final class MenuBar: NSObject, NSMenuDelegate {
         sound.state = Preferences.soundWhenDone ? .on : .off
         menu.addItem(sound)
 
+        let byProject = entry("Color by project", #selector(toggleColorByProject))
+        byProject.state = Preferences.colorByProject ? .on : .off
+        menu.addItem(byProject)
+
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Tomari", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
@@ -73,6 +77,11 @@ final class MenuBar: NSObject, NSMenuDelegate {
 
     @objc private func toggleSound() {
         Preferences.soundWhenDone.toggle()
+    }
+
+    @objc private func toggleColorByProject() {
+        Preferences.colorByProject.toggle()
+        strip.refresh()
     }
 
     @objc private func chooseEdge(_ sender: NSMenuItem) {
