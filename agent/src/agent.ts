@@ -1,5 +1,5 @@
 import { PANEL_PORT } from "../../shared/protocol.ts";
-import { HOOK_PORT, loadConfig, panelUrls } from "./config.ts";
+import { HOOK_PORT, loadConfig } from "./config.ts";
 import { watchDesktopFocus } from "./desktop-focus.ts";
 import { FocusArbiter } from "./focus-arbiter.ts";
 import { FrontApp } from "./front-app.ts";
@@ -10,8 +10,8 @@ import { Store } from "./store.ts";
 import { firstPrompt } from "./transcript.ts";
 import { watchTerminalFocus } from "./terminal-focus.ts";
 
-/** Runs until SIGINT or SIGTERM. `lan` opens the WebSocket to the network, for a claude-panel Pi. */
-export async function runAgent({ lan }: { lan: boolean }) {
+/** Runs until SIGINT or SIGTERM. */
+export async function runAgent() {
   const config = await loadConfig();
   const store = new Store(config.dbPath);
   const hub = new SessionHub(store, Date.now, (id, transcriptPath) => firstPrompt(id, { transcriptPath }));
@@ -22,7 +22,6 @@ export async function runAgent({ lan }: { lan: boolean }) {
     token: config.token,
     hookPort: HOOK_PORT,
     panelPort: PANEL_PORT,
-    panelHost: lan ? "0.0.0.0" : "127.0.0.1",
   });
   const stopPoller = startPoller(hub);
   // Both focus sources coexist: the one for the app in front wins, and the other waits (see FocusArbiter).
@@ -48,10 +47,9 @@ export async function runAgent({ lan }: { lan: boolean }) {
     console.log(`${time}  ${s.id.slice(0, 8)}  ${s.state.padEnd(16)} ${s.name}${flags}  ${s.activity ?? ""}`);
   });
 
-  const urls = lan ? await panelUrls() : [`ws://127.0.0.1:${PANEL_PORT}/ws`];
   console.log(`tomari agent
   hooks : http://127.0.0.1:${HOOK_PORT}/hook
-  panel : ${urls.join("  ")}
+  panel : ws://127.0.0.1:${PANEL_PORT}/ws
   data  : ${config.dbPath}
 `);
 

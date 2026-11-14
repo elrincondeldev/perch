@@ -1,6 +1,6 @@
 import Foundation
 
-/// Read from Resources/characters.json, a format shared with claude-panel's Pi panel.
+/// Read from Resources/characters.json.
 public struct CharacterTemplate: Decodable, Sendable {
     public let id: String
     public let label: String

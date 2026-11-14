@@ -26,10 +26,8 @@ let stopped: string[];
 let stop: (id: string) => Promise<OpenResult>;
 let desktopSessions: () => Promise<DesktopSession[]>;
 let terminal: () => Promise<OpenResult>;
-let local: boolean;
 
 beforeEach(() => {
-  local = true;
   opened = [];
   stopped = [];
   stop = async (id) => {
@@ -46,7 +44,6 @@ beforeEach(() => {
     token: TOKEN,
     hookPort: 0, // 0 = any free port
     panelPort: 0,
-    panelHost: "127.0.0.1",
     open: async (id, { cwd, kind, name } = {}) => {
       opened.push([id, cwd, kind, name]);
       return { ok: true, command: ["fake-open", id] };
@@ -54,7 +51,6 @@ beforeEach(() => {
     desktopSessions: () => desktopSessions(),
     terminal: () => terminal(),
     stop: (id) => stop(id),
-    isLocal: () => local,
   });
 });
 afterEach(() => servers.stop());
@@ -310,28 +306,6 @@ test("stop refuses interactive, closed and unknown sessions without running anyt
   ws.close();
 });
 
-test("stop is refused from a client that is not on this Mac, e.g. a Pi panel", async () => {
-  hub.handleAgents([{ sessionId: BG, cwd: "/tmp/bg", kind: "background", status: "idle", startedAt: 0 }]);
-  local = false;
-  const { ws, next } = await connect();
-  await next(); // snapshot
-  ws.send(JSON.stringify({ type: "stop", id: BG }));
-  expect(await next()).toEqual({ type: "error", message: "stop only works from this Mac" });
-  expect(stopped).toEqual([]);
-  expect(hub.get(BG)!.live).toBe(true);
-  ws.close();
-});
-
-test("a client that is not on this Mac gets a generic error, not the command's output", async () => {
-  local = false;
-  terminal = async () => ({ ok: false, error: "osascript exited with 1: /Users/someone/private path" });
-  const { ws, next } = await connect();
-  await next(); // snapshot
-  ws.send(JSON.stringify({ type: "terminal" }));
-  expect(await next()).toEqual({ type: "error", message: "the command failed on the Mac" });
-  ws.close();
-});
-
 test("a failed stop reaches the panel and leaves the session alone", async () => {
   hub.handleAgents([{ sessionId: BG, cwd: "/tmp/bg", kind: "background", status: "idle", startedAt: 0 }]);
   stop = async () => ({ ok: false, error: "claude exited with 1" });
@@ -382,7 +356,7 @@ test("a client that never reported leaves the front app alone when it disconnect
   await reporter.next();
   reporter.ws.send(JSON.stringify({ type: "frontApp", app: "desktop" }));
   await waitFor(() => front.value === "desktop");
-  const viewer = await connect(); // e.g. a Pi panel
+  const viewer = await connect(); // a second client that only watches
   await viewer.next();
   viewer.ws.close();
   await Bun.sleep(50);

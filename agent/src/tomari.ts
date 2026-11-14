@@ -10,10 +10,10 @@ const command = parseCommand(process.argv.slice(2));
 try {
   switch (command.name) {
     case "agent":
-      await runAgent({ lan: command.lan });
+      await runAgent();
       break;
     case "setup":
-      await setup({ pi: command.pi });
+      await setup();
       break;
     case "status":
       await status(VERSION);

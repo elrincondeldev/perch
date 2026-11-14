@@ -21,13 +21,12 @@ That's all: the strip appears on the right edge with a **+** to pin your session
 - copies Tomari's binaries into `~/Library/Application Support/tomari/bin`;
 - adds hooks to `~/.claude/settings.json`, after backing it up, so Claude Code reports each event to Tomari's agent;
 - starts the agent and the strip now and at every login, as LaunchAgents;
-- replaces [claude-panel](https://github.com/elrincondeldev/claude-panel)'s agent if you have it, keeping its pinned sessions, their looks and its pairing token;
+- replaces [claude-panel](https://github.com/elrincondeldev/claude-panel)'s agent if you have it, keeping its pinned sessions and their looks;
 - moves an install from when Tomari was called Perch (`@elrincondeldev/perch`) into Tomari's places, keeping its pins, icons and token.
 
 ```bash
 npx tomari status             # what's installed and running
 npx tomari uninstall          # remove everything; asks before deleting pins and icons
-npx tomari setup --pi         # also let a claude-panel Raspberry Pi connect over your network
 ```
 
 You need the Claude desktop app (sessions in its Code tab), the Claude Code CLI 2.1.285 or newer, and Node.js 18 or newer for `npx`.
@@ -50,12 +49,12 @@ You need the Claude desktop app (sessions in its Code tab), the Claude Code CLI 
 
 ```
 Claude Code ─ hooks ─▶ tomari agent ◀─ WebSocket (127.0.0.1:7778, token) ─ tomari-overlay ─ menu bar
-claude agents ─ poll ─▶  └ SQLite: pins, icons                       └ claude-panel Pi (with --pi)
+claude agents ─ poll ─▶  └ SQLite: pins, icons
 ```
 
-- **`tomari`** (`agent/`, Bun and TypeScript compiled into one binary) holds the CLI and the agent. The agent tracks every session's state from Claude Code hooks and `claude agents --json`, keeps pins and icons in SQLite, and opens sessions in the desktop app. It listens on 127.0.0.1 only, unless you set it up with `--pi`.
+- **`tomari`** (`agent/`, Bun and TypeScript compiled into one binary) holds the CLI and the agent. The agent tracks every session's state from Claude Code hooks and `claude agents --json`, keeps pins and icons in SQLite, and opens sessions in the desktop app. It listens on 127.0.0.1 only.
 - **`tomari-overlay`** (`Sources/`, Swift) is a native AppKit and Core Animation app that runs as an accessory: no Dock icon, just the strip and a menu bar item. It costs about 0.5 % of one CPU core and 13 MB of memory while it animates.
-- **`shared/protocol.ts`** is the contract between them, and the Pi panel speaks it too.
+- **`shared/protocol.ts`** is the contract between them.
 
 | What the agent reads from Claude | Used for | Documented? |
 |---|---|---|
@@ -111,8 +110,8 @@ On Vercel, import the repository and set its Root Directory to `site`; Vercel de
 
 ## Privacy
 
-- Everything stays on your Mac: the overlay only talks to the agent on 127.0.0.1, and the agent only listens there unless you choose `--pi`. No telemetry.
-- The WebSocket needs the pairing token in `~/Library/Application Support/tomari/config.json`, and accepts only `open`, `pin`, `icon`, `stop`, `library`, `terminal` and `frontApp` (which of Terminal, the Claude desktop app or another app is in front, nothing more), with validated arguments. `stop`, and the error output of a failed command, are only for a client on this Mac: with `--pi`, the Pi panel can neither stop sessions nor read local paths.
+- Everything stays on your Mac: the overlay only talks to the agent on 127.0.0.1, and the agent only listens there. No telemetry.
+- The WebSocket needs the pairing token in `~/Library/Application Support/tomari/config.json`, and accepts only `open`, `pin`, `icon`, `stop`, `library`, `terminal` and `frontApp` (which of Terminal, the Claude desktop app or another app is in front, nothing more), with validated arguments.
 - Tomari keeps its data in `~/Library/Application Support/tomari/`, its logs in `~/Library/Logs/tomari/`, and the strip's edge in the `com.elrincondeldev.tomari` defaults.
 - When several untitled sessions share a folder name, the strip tells them apart with the first 24 characters of each one's first prompt. It is kept in memory only, never written to disk, but it is visible on screen like the hover label below.
 - The hover label can show tool details such as a shell command, so anyone who can see your screen can read them.

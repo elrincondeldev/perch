@@ -120,7 +120,7 @@ func protocolTests() {
         }
     }
 
-    test("the color palette matches the Pi panel's and includes the default") {
+    test("the color palette keeps its colors and includes the default") {
         expectEqual(SessionIcon.palette.map(\.color), ["#ff6b1a", "#d97757", "#ffd23f", "#4cd964", "#3ccfe6", "#4f7cff", "#a66cff", "#ff5fa2", "#e8e8e8"])
         expect(SessionIcon.palette.contains { $0.color == SessionIcon.default.color })
     }

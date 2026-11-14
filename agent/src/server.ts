@@ -1,7 +1,6 @@
 /**
- * Two servers: hooks on loopback only, and the panel WebSocket behind the pairing token,
- * on loopback unless a Pi needs it on the network. Keeping them apart means the
- * network-facing port can never inject hook events.
+ * Two servers, both on loopback: hooks, and the panel WebSocket behind the pairing token.
+ * Keeping them apart means a panel client can never inject hook events.
  */
 import { timingSafeEqual } from "node:crypto";
 import { basename } from "node:path";
@@ -21,21 +20,11 @@ export interface ServerOptions {
   token: string;
   hookPort: number;
   panelPort: number;
-  panelHost?: string;
   /** Replaceable so tests don't open real sessions or tabs, or read the real desktop app. */
   open?: (id: string, options?: OpenOptions) => Promise<OpenResult>;
   terminal?: () => Promise<OpenResult>;
   stop?: (id: string) => Promise<OpenResult>;
   desktopSessions?: () => Promise<DesktopSession[]>;
-  /** Whether a panel client connects from this Mac; with `--pi` others can reach the port. Replaceable for tests. */
-  isLocal?: (address: string | undefined) => boolean;
-}
-
-const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
-
-/** Only a client on this Mac may stop sessions or see a command's error output. */
-function loopback(address: string | undefined) {
-  return address !== undefined && LOOPBACK.has(address);
 }
 
 const TOPIC = "panel";
@@ -47,12 +36,10 @@ export function startServers({
   token,
   hookPort,
   panelPort,
-  panelHost = "127.0.0.1",
   open = openSession,
   terminal = openTerminalTab,
   stop = stopSession,
   desktopSessions = desktopSessionsLister(),
-  isLocal = loopback,
 }: ServerOptions) {
   /** Desktop sessions plus the live ones the agent sees, e.g. in a terminal; a desktop entry wins a duplicate. */
   async function library(): Promise<LibraryEntry[]> {
@@ -96,22 +83,15 @@ export function startServers({
     },
   });
 
-  /** A command's error output can hold local paths: only a client on this Mac gets it; others see a generic line. */
-  function failed(ws: { data: { local: boolean }; send(data: string): unknown }, error: string) {
-    if (ws.data.local) return send(ws, { type: "error", message: error });
-    console.error(`panel command failed: ${error}`);
-    send(ws, { type: "error", message: "the command failed on the Mac" });
-  }
-
-  const panelServer = Bun.serve<{ local: boolean; reportedFront: boolean }>({
-    hostname: panelHost,
+  const panelServer = Bun.serve<{ reportedFront: boolean }>({
+    hostname: "127.0.0.1",
     port: panelPort,
     fetch(req, server) {
       const url = new URL(req.url);
       if (url.pathname === "/health") return Response.json({ ok: true, sessions: hub.snapshot().length });
       if (url.pathname !== "/ws") return new Response("not found", { status: 404 });
       if (!sameSecret(url.searchParams.get("token"), token)) return new Response("unauthorized", { status: 401 });
-      if (server.upgrade(req, { data: { local: isLocal(server.requestIP(req)?.address), reportedFront: false } })) return;
+      if (server.upgrade(req, { data: { reportedFront: false } })) return;
       return new Response("expected a WebSocket", { status: 400 });
     },
     websocket: {
@@ -133,7 +113,7 @@ export function startServers({
           }
           if (msg.type === "terminal") {
             const result = await terminal();
-            if (!result.ok) failed(ws, result.error);
+            if (!result.ok) send(ws, { type: "error", message: result.error });
             return;
           }
           if (!hub.has(msg.id) && msg.type !== "open" && msg.type !== "stop") await adoptFromDesktop(msg.id);
@@ -145,11 +125,10 @@ export function startServers({
               const result = await open(msg.id, { cwd: session?.cwd, kind: session?.kind, name: hub.titleOf(msg.id) ?? undefined });
               // The desktop log confirms focus a moment later; show it right away.
               if (result.ok) hub.setFocused(msg.id);
-              else failed(ws, result.error);
+              else send(ws, { type: "error", message: result.error });
               break;
             }
             case "stop": {
-              if (!ws.data.local) return send(ws, { type: "error", message: "stop only works from this Mac" });
               const session = hub.get(msg.id);
               if (!session?.live || session.kind !== BACKGROUND_KIND) {
                 return send(ws, { type: "error", message: "not a running background session" });
@@ -159,7 +138,7 @@ export function startServers({
               try {
                 const result = await stop(msg.id);
                 if (result.ok) hub.endSession(msg.id);
-                else failed(ws, result.error);
+                else send(ws, { type: "error", message: result.error });
               } finally {
                 stopping.delete(msg.id);
               }
@@ -174,7 +153,7 @@ export function startServers({
           }
         } catch (error) {
           console.error(`panel message failed: ${error instanceof Error ? error.message : String(error)}`);
-          send(ws, { type: "error", message: "internal error" }); // details stay in the log, off the network port
+          send(ws, { type: "error", message: "internal error" }); // details stay in the log
         }
       },
       close(ws) {
