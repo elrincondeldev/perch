@@ -4,7 +4,7 @@ import { describe, tomariJobs } from "./launchd.ts";
 import { hooksInstalled } from "./settings.ts";
 
 export async function status(version: string) {
-  const [agent, overlay] = tomariJobs({ binDir: BIN_DIR, logDir: LOG_DIR }, { lan: false });
+  const [agent, overlay] = tomariJobs({ binDir: BIN_DIR, logDir: LOG_DIR });
   const health = await fetch(`http://127.0.0.1:${PANEL_PORT}/health`, { signal: AbortSignal.timeout(2000) })
     .then((r) => r.json() as Promise<{ sessions: number }>)
     .catch(() => null);

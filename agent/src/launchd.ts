@@ -19,11 +19,11 @@ const DOMAIN = `gui/${process.getuid!()}`;
 // launchd starts processes with a bare PATH; the agent runs `claude`.
 const PATH = [`${HOME}/.local/bin`, `${HOME}/.bun/bin`, "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"].join(":");
 
-export function tomariJobs({ binDir, logDir }: { binDir: string; logDir: string }, { lan }: { lan: boolean }): Job[] {
+export function tomariJobs({ binDir, logDir }: { binDir: string; logDir: string }): Job[] {
   return [
     {
       label: "com.elrincondeldev.tomari.agent",
-      program: [`${binDir}/tomari`, "agent", ...(lan ? ["--lan"] : [])],
+      program: [`${binDir}/tomari`, "agent"],
       keepAlive: "always",
       log: `${logDir}/agent.log`,
     },

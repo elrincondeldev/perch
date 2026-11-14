@@ -1,6 +1,6 @@
 import Foundation
 
-// Mirrors shared/protocol.ts; keep the two in step, and compatible with claude-panel's Pi panel.
+// Mirrors shared/protocol.ts; keep the two in step.
 
 public let panelPort = 7778
 
@@ -31,7 +31,7 @@ public struct SessionIcon: Equatable, Sendable, Decodable {
 
     public static let `default` = SessionIcon(character: "default", color: "#d97757")
 
-    /// The colors the Pi panel offers, so a choice made on either face exists on the other.
+    /// The colors a session's creature can take, offered in its right-click menu.
     public static let palette: [(name: String, color: String)] = [
         ("Orange", "#ff6b1a"), ("Clay", "#d97757"), ("Yellow", "#ffd23f"), ("Green", "#4cd964"), ("Cyan", "#3ccfe6"),
         ("Blue", "#4f7cff"), ("Purple", "#a66cff"), ("Pink", "#ff5fa2"), ("White", "#e8e8e8"),

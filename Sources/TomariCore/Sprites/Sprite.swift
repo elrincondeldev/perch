@@ -1,4 +1,4 @@
-// Grown from claude-panel's ui/src/lib/sprites/render.ts. Working and finished look livelier here; the Pi panel can port them back.
+// Grown from claude-panel's ui/src/lib/sprites/render.ts.
 
 public enum Mood: CaseIterable, Sendable {
     case idle, working, alert, asking, compacting, error, sleeping

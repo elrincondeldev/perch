@@ -18,5 +18,4 @@ export const requirements: readonly string[] = [
 export const commands: readonly { command: string; does: string }[] = [
   { command: "npx tomari status", does: "What's installed and running" },
   { command: "npx tomari uninstall", does: "Removes everything; asks before deleting your pins" },
-  { command: "npx tomari setup --pi", does: "Also lets a claude-panel Raspberry Pi show the same creatures" },
 ];
