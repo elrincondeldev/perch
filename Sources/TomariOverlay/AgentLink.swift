@@ -29,6 +29,7 @@ final class AgentLink {
     @ObservationIgnored private var libraryReply: (([LibraryEntry]) -> Void)?
     @ObservationIgnored private var noticeExpiry: Task<Void, Never>?
     @ObservationIgnored private var doneChime = DoneChime()
+    @ObservationIgnored private var waitingChime = WaitingChime()
     @ObservationIgnored private var frontReporter = FrontAppReporter()
     @ObservationIgnored private var frontObserver: NSObjectProtocol?
 
@@ -108,18 +109,21 @@ final class AgentLink {
                 libraryReply?(entries)
                 libraryReply = nil
             default:
-                chimeIfFinished(parsed)
+                chimeIfNeeded(parsed)
                 list.apply(parsed)
             }
         }
     }
 
     /// Called before `parsed` is applied, so the list still holds the session as it was.
-    private func chimeIfFinished(_ parsed: ServerMessage) {
-        guard Preferences.soundWhenDone, case .session(let session) = parsed else { return }
+    private func chimeIfNeeded(_ parsed: ServerMessage) {
+        guard case .session(let session) = parsed, Preferences.soundWhenDone || Preferences.soundWhenWaiting else { return }
         let front = FrontAppKind(bundleId: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
-        if doneChime.shouldChime(for: parsed, previous: list.sessions[session.id], focusedId: list.focusedId, frontApp: front, at: Date()) {
+        let previous = list.sessions[session.id]
+        if Preferences.soundWhenDone, doneChime.shouldChime(for: parsed, previous: previous, focusedId: list.focusedId, frontApp: front, at: Date()) {
             NSSound(named: "Glass")?.play()
+        } else if Preferences.soundWhenWaiting, waitingChime.shouldChime(for: parsed, previous: previous, focusedId: list.focusedId, frontApp: front, at: Date()) {
+            NSSound(named: "Ping")?.play()
         }
     }
 
