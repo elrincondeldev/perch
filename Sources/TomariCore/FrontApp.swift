@@ -13,6 +13,9 @@ public enum FrontAppKind: String, Equatable, Sendable {
         default: self = .other
         }
     }
+
+    /// Whether the focused session is on screen in this app: Terminal for CLI sessions, the desktop app for its own.
+    public var showsSessions: Bool { self != .other }
 }
 
 /// Lets a kind through only when it differs from the one last sent on this connection.
