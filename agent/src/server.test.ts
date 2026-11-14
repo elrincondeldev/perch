@@ -235,8 +235,10 @@ test("planOpen: deep link for desktop sessions (running or not), refuse terminal
   try {
     expect(await planOpen("not-a-uuid", dirs)).toEqual({ ok: false, error: "invalid session id" });
 
+    // Not a desktop session and not running: resumed in Terminal even though the desktop app is installed.
     const unknown = await planOpen(ID, dirs);
-    expect(unknown.ok && unknown.command.slice(1)).toEqual(["--desktop", "--resume", ID]);
+    expect(unknown.ok && unknown.command[0]).toBe("osascript");
+    expect(unknown.ok && unknown.command.at(-1)).toBe(ID);
 
     // process.pid makes the fake session count as running.
     writeFileSync(`${liveDir}/1.json`, JSON.stringify({ pid: process.pid, sessionId: ID, entrypoint: "cli" }));
