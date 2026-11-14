@@ -42,6 +42,7 @@ You need the Claude desktop app (sessions in its Code tab), the Claude Code CLI 
 - **Background sessions** (`claude --bg`) run in a terminal the Claude daemon owns, so clicking one attaches it with `claude attach` in a new Terminal tab. Right-click one and choose **Stop session** to run `claude stop` (it asks first if the session is busy); the conversation is kept.
 - **Right-click** (or control-click) to pin or unpin the session and pick its character and color.
 - **Sound when done**: off by default; turn it on from the menu bar icon to hear a short chime when a session finishes working. It stays quiet for the session you are looking at in Terminal.
+- **Color by project**: off by default; turn it on from the menu bar icon to give each project its own color, so sessions in the same folder (or the same repo, for Claude worktrees under `.claude/worktrees`) look alike. It only applies to creatures still in the default color; one you colored yourself keeps its color.
 - **Stays out of the way**: the strip floats over every Space and full-screen app and never takes focus from the app you're using. The arrow tab beside it slides the strip off the edge, leaving just the tab, which blinks orange when a session needs you; click it again to bring the strip back.
 - **Menu bar item** to show or hide the strip, move it to the left or right edge, and see how many sessions are waiting for you. Quit Tomari there; it starts again at your next login.
 
