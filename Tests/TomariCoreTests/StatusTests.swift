@@ -52,19 +52,34 @@ func statusTests() {
         expectEqual(ago(since: now - 2 * 86400, now: now), "2d")
     }
 
+    test("elapsed") {
+        expectEqual(elapsed(since: now, now: now), "<1m")
+        expectEqual(elapsed(since: now - 59, now: now), "<1m")
+        expectEqual(elapsed(since: now + 30, now: now), "<1m")
+        expectEqual(elapsed(since: now - 60, now: now), "1m")
+        expectEqual(elapsed(since: now - 4 * 60 - 59, now: now), "4m")
+        expectEqual(elapsed(since: now - 59 * 60 - 59, now: now), "59m")
+        expectEqual(elapsed(since: now - 3600, now: now), "1h")
+        expectEqual(elapsed(since: now - 3600 - 5 * 60, now: now), "1h 5m")
+        expectEqual(elapsed(since: now - 23 * 3600 - 59 * 60, now: now), "23h 59m")
+        expectEqual(elapsed(since: now - 86400, now: now), "1d")
+        expectEqual(elapsed(since: now - 86400 - 3 * 3600 - 20 * 60, now: now), "1d 3h")
+    }
+
     test("statusLine") {
-        expectEqual(session(state: .working, activity: "Bash: npm test").statusLine(at: now), "Bash: npm test")
-        expectEqual(session(state: .working).statusLine(at: now), "working")
+        expectEqual(session(state: .working, activity: "Bash: npm test", stateSince: now - 4 * 60).statusLine(at: now), "Bash: npm test · 4m")
+        expectEqual(session(state: .working, stateSince: now - 4 * 60).statusLine(at: now), "working · 4m")
+        expectEqual(session(state: .working).statusLine(at: now), "working · <1m")
         expectEqual(session(state: .done, stateSince: now - 5 * 60).statusLine(at: now), "done · 5m")
         expectEqual(session(state: .idle, stateSince: now - 42).statusLine(at: now), "idle · 42s")
         expectEqual(session(state: .ended, live: false, stateSince: now - 2 * 3600).statusLine(at: now), "closed · 2h")
         expectEqual(
-            session(state: .needsPermission, activity: "Claude needs your permission to use Bash").statusLine(at: now),
-            "needs permission"
+            session(state: .needsPermission, activity: "Claude needs your permission to use Bash", stateSince: now - 90).statusLine(at: now),
+            "needs permission · 1m"
         )
-        expectEqual(session(state: .needsInput).statusLine(at: now), "waiting for you")
-        expectEqual(session(state: .needsInput, activity: "Plan ready").statusLine(at: now), "Plan ready")
-        expectEqual(session(state: .compacting).statusLine(at: now), "compacting")
+        expectEqual(session(state: .needsInput, stateSince: now - 2 * 60).statusLine(at: now), "waiting for you · 2m")
+        expectEqual(session(state: .needsInput, activity: "Plan ready", stateSince: now - 3600 - 5 * 60).statusLine(at: now), "Plan ready · 1h 5m")
+        expectEqual(session(state: .compacting, stateSince: now - 70).statusLine(at: now), "compacting · 1m")
         expectEqual(session(state: .error).statusLine(at: now), "error")
         expectEqual(session(state: .error, activity: "rate limited").statusLine(at: now), "error · rate limited")
     }

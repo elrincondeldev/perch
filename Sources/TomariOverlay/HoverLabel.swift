@@ -36,6 +36,8 @@ final class HoverLabel {
             field.maximumNumberOfLines = 1
             box.addSubview(field)
         }
+        // A long activity is cut in the middle so the elapsed time at its end ("· 4m") stays visible.
+        status.lineBreakMode = .byTruncatingMiddle
         panel.contentView = box
         panel.ignoresMouseEvents = true
     }
