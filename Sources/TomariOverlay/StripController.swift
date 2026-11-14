@@ -220,4 +220,10 @@ func track(_ apply: @escaping @MainActor () -> Void) {
 
 enum Preferences {
     static let store = UserDefaults(suiteName: "com.elrincondeldev.tomari") ?? .standard
+
+    /// Chime when a session finishes; off until the user turns it on.
+    static var soundWhenDone: Bool {
+        get { store.bool(forKey: "soundWhenDone") }
+        set { store.set(newValue, forKey: "soundWhenDone") }
+    }
 }

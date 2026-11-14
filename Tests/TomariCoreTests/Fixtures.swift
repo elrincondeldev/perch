@@ -11,7 +11,8 @@ func session(
     live: Bool = true,
     stateSince: Date = now,
     pinned: Bool = false,
-    position: Int? = nil
+    position: Int? = nil,
+    kind: String? = nil
 ) -> PanelSession {
     sequence += 1
     return PanelSession(
@@ -24,6 +25,7 @@ func session(
         stateSince: stateSince,
         pinned: pinned,
         position: position,
-        icon: .default
+        icon: .default,
+        kind: kind
     )
 }

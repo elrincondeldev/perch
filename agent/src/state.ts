@@ -6,12 +6,14 @@
  * reliable signal that a session process has died.
  */
 import { basename } from "node:path";
-import type { SessionState } from "../../shared/protocol.ts";
+import type { SessionKind, SessionState } from "../../shared/protocol.ts";
 
 export interface HookEvent {
   hook_event_name: string;
   session_id: string;
   cwd: string;
+  /** Set on tool events fired by a subagent rather than the main thread. */
+  agent_id?: string;
   [field: string]: unknown;
 }
 
@@ -20,7 +22,7 @@ export interface AgentEntry {
   sessionId: string;
   name?: string;
   cwd: string;
-  kind?: string;
+  kind?: SessionKind;
   pid?: number;
   status?: "busy" | "waiting" | "idle";
   startedAt: number;
@@ -39,6 +41,8 @@ export interface SessionRecord {
   stateSince: number;
   /** Time of the last hook event; 0 if only the poll has seen the session. */
   lastEventAt: number;
+  /** From the poll: "interactive" (a terminal) or "background" (`claude agents`, `--bg`). Not persisted. */
+  kind?: SessionKind;
 }
 
 /** How long hook-derived state wins over a contradicting poll. */
@@ -59,6 +63,8 @@ function newRecord(id: string, cwd: string, now: number, state: SessionState = "
 export function applyHookEvent(prev: SessionRecord | undefined, e: HookEvent, now: number): SessionRecord {
   const rec: SessionRecord = { ...(prev ?? newRecord(e.session_id, e.cwd, now)), live: true, lastEventAt: now };
   const to = (state: SessionState, activity: string | null) => moveTo(rec, state, activity, now);
+  // Background subagents keep calling tools after the turn ends, under the parent's session_id.
+  const afterTurn = Boolean(e.agent_id) && (rec.state === "done" || rec.state === "error");
 
   switch (e.hook_event_name) {
     case "SessionStart":
@@ -70,12 +76,12 @@ export function applyHookEvent(prev: SessionRecord | undefined, e: HookEvent, no
     case "PreToolUse": {
       const tool = String(e.tool_name ?? "");
       if (tool in ASKS_USER) return to("needs_input", ASKS_USER[tool]!);
-      return to("working", describeTool(tool, e.tool_input));
+      return afterTurn ? rec : to("working", describeTool(tool, e.tool_input));
     }
 
     case "PostToolUse":
     case "PostToolUseFailure":
-      return to("working", describeTool(String(e.tool_name ?? ""), e.tool_input));
+      return afterTurn ? rec : to("working", describeTool(String(e.tool_name ?? ""), e.tool_input));
 
     case "Notification":
       switch (e.notification_type) {
@@ -162,18 +168,23 @@ function reconcileOne(prev: SessionRecord | undefined, agent: AgentEntry, now: n
   const polled = stateFromStatus(agent.status);
 
   if (!prev) {
-    return { ...newRecord(agent.sessionId, agent.cwd, now, polled), name: agent.name ?? null, pid: agent.pid ?? null, lastEventAt: 0 };
+    return { ...newRecord(agent.sessionId, agent.cwd, now, polled), name: agent.name ?? null, pid: agent.pid ?? null, lastEventAt: 0, kind: agent.kind };
   }
 
-  const rec: SessionRecord = { ...prev, name: agent.name ?? prev.name, cwd: agent.cwd, pid: agent.pid ?? prev.pid, live: true };
+  const rec: SessionRecord = { ...prev, name: agent.name ?? prev.name, cwd: agent.cwd, pid: agent.pid ?? prev.pid, live: true, kind: agent.kind ?? prev.kind };
 
   if (prev.state === "ended") return moveTo(rec, polled, null, now);
   if (now - prev.lastEventAt <= GRACE_MS) return rec;
 
-  // Hooks have gone quiet: correct only clear contradictions.
+  // Hooks have gone quiet: correct only clear contradictions. Busy doesn't wake a finished turn
+  // (done or error): a background task keeps the poll at busy after the turn ends, and the
+  // Stop or StopFailure hook is authoritative. It still clears idle and a stale prompt (needs_*).
   const { state } = rec;
+  const finished = state === "done" || state === "error";
   if (agent.status === "idle" && (state === "working" || state === "compacting")) return moveTo(rec, "done", null, now);
-  if (agent.status === "busy" && state !== "working" && state !== "compacting") return moveTo(rec, "working", null, now);
+  // Esc at a prompt fires no hook; idle, unlike done, does not ask for attention.
+  if (agent.status === "idle" && (state === "needs_permission" || state === "needs_input")) return moveTo(rec, "idle", null, now);
+  if (agent.status === "busy" && state !== "working" && state !== "compacting" && !finished) return moveTo(rec, "working", null, now);
   if (agent.status === "waiting" && state === "working") return moveTo(rec, "needs_input", "Waiting for you", now);
   return rec;
 }
@@ -189,7 +200,9 @@ function moveTo(rec: SessionRecord, state: SessionState, activity: string | null
 }
 
 function sameRecord(a: SessionRecord, b: SessionRecord) {
-  return (Object.keys(a) as (keyof SessionRecord)[]).every((k) => a[k] === b[k]);
+  // Both sides' keys: an optional field such as kind may exist only in b.
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof SessionRecord>;
+  return [...keys].every((k) => a[k] === b[k]);
 }
 
 function oneLine(value: unknown) {

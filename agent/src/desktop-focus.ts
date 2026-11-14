@@ -26,7 +26,7 @@ export function lastFocus(text: string): string | null | undefined {
  */
 export function watchDesktopFocus(
   onFocus: (sessionId: string | null) => void,
-  { log = LOG, sessionsDir = DESKTOP_SESSIONS_DIR, pollMs = 1000 } = {},
+  { log = LOG, sessionsDir = DESKTOP_SESSIONS_DIR, pollMs = 1000, missingPollMs = 60_000 } = {},
 ) {
   let offset = 0;
   let partialLine = "";
@@ -41,6 +41,7 @@ export function watchDesktopFocus(
 
   (async () => {
     while (!stopped) {
+      let wait = pollMs;
       try {
         const { size } = await stat(log);
         if (size < offset) {
@@ -56,9 +57,10 @@ export function watchDesktopFocus(
           if (focus !== undefined) await apply(focus);
         }
       } catch {
-        // No log yet (app never started): keep polling.
+        // No log yet (app not installed or never started): look again, but not every second.
+        wait = missingPollMs;
       }
-      await Bun.sleep(pollMs);
+      await Bun.sleep(wait);
     }
   })();
 

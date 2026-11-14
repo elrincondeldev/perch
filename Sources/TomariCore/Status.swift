@@ -7,6 +7,19 @@ extension PanelSession {
         state == .needsPermission || state == .needsInput
     }
 
+    /// Only a live background session can be stopped from the strip.
+    public var canStop: Bool {
+        live && kind == "background"
+    }
+
+    /// Stopping interrupts the current turn when the session is busy or waiting on the user.
+    public var stopNeedsConfirmation: Bool {
+        switch state {
+        case .working, .compacting, .needsPermission, .needsInput: return true
+        case .idle, .done, .error, .ended: return false
+        }
+    }
+
     /// Doing something or waiting on the user, or finished recently: the strip shows these even unpinned.
     public func isActive(at now: Date) -> Bool {
         guard live else { return false }

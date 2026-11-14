@@ -9,6 +9,12 @@ enum CreatureMenu {
         menu.addItem(.sectionHeader(title: session.name))
         menu.addItem(ActionItem("Open") { send(.open(id: id)) })
         menu.addItem(ActionItem(session.pinned ? "Unpin" : "Pin") { send(.pin(id: id, pinned: !session.pinned)) })
+        if session.canStop {
+            menu.addItem(ActionItem("Stop session") {
+                if session.stopNeedsConfirmation, !confirmStop() { return }
+                send(.stop(id: id))
+            })
+        }
         menu.addItem(.separator())
 
         let characters = NSMenu()
@@ -31,6 +37,16 @@ enum CreatureMenu {
         }
         menu.addItem(submenu("Color", colors, image: swatch(icon.color)))
         return menu
+    }
+
+    private static func confirmStop() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Stop this session?"
+        alert.informativeText = "Its current turn will be interrupted. You can resume it later with claude --resume."
+        alert.addButton(withTitle: "Stop")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private static func submenu(_ title: String, _ menu: NSMenu, image: NSImage) -> NSMenuItem {
@@ -71,11 +87,12 @@ enum CreatureMenu {
 
 enum LibraryMenu {
     /// The Claude app's sessions, most recent first; choosing one pins it, or unpins it when it already is.
+    /// Ends with an item that opens a plain shell in Terminal.app.
     static func make(_ entries: [LibraryEntry], now: Date, send: @escaping (ClientMessage) -> Void) -> NSMenu {
         let menu = NSMenu()
         menu.addItem(.sectionHeader(title: "Pin a session"))
         if entries.isEmpty {
-            menu.addItem(withTitle: "No sessions in the Claude app", action: nil, keyEquivalent: "")
+            menu.addItem(withTitle: "No sessions", action: nil, keyEquivalent: "")
         }
         for entry in entries {
             let item = ActionItem(entry.name, checked: entry.pinned) { send(.pin(id: entry.id, pinned: !entry.pinned)) }
@@ -88,6 +105,8 @@ enum LibraryMenu {
             item.toolTip = entry.cwd
             menu.addItem(item)
         }
+        menu.addItem(.separator())
+        menu.addItem(ActionItem("New Terminal tab") { send(.terminal) })
         return menu
     }
 }

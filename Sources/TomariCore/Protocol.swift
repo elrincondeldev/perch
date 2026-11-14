@@ -50,10 +50,12 @@ public struct PanelSession: Equatable, Identifiable, Sendable {
     public var pinned: Bool
     public var position: Int?
     public var icon: SessionIcon
+    /// "interactive" or "background" (run by the Claude daemon, no terminal of its own); nil until the agent knows.
+    public var kind: String?
 
     public init(
         id: String, name: String, cwd: String, state: SessionState, activity: String?, live: Bool,
-        stateSince: Date, pinned: Bool, position: Int?, icon: SessionIcon
+        stateSince: Date, pinned: Bool, position: Int?, icon: SessionIcon, kind: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -65,12 +67,13 @@ public struct PanelSession: Equatable, Identifiable, Sendable {
         self.pinned = pinned
         self.position = position
         self.icon = icon
+        self.kind = kind
     }
 }
 
 extension PanelSession: Decodable {
     private enum Keys: String, CodingKey {
-        case id, name, cwd, state, activity, live, stateSince, pinned, position, icon
+        case id, name, cwd, state, activity, live, stateSince, pinned, position, icon, kind
     }
 
     public init(from decoder: Decoder) throws {
@@ -86,7 +89,8 @@ extension PanelSession: Decodable {
             stateSince: Date(timeIntervalSince1970: stateSinceEpochMs / 1000),
             pinned: try c.decode(Bool.self, forKey: .pinned),
             position: try c.decodeIfPresent(Int.self, forKey: .position),
-            icon: try c.decode(SessionIcon.self, forKey: .icon)
+            icon: try c.decode(SessionIcon.self, forKey: .icon),
+            kind: try? c.decodeIfPresent(String.self, forKey: .kind)
         )
     }
 }
@@ -178,11 +182,17 @@ public enum ClientMessage: Equatable, Sendable {
     case icon(id: String, icon: SessionIcon)
     /// Asks for the desktop sessions that can be pinned; answered with `ServerMessage.library`.
     case library
+    /// Opens a shell, without Claude, in a new Terminal.app tab.
+    case terminal
+    /// Stops a live background session; its conversation is kept.
+    case stop(id: String)
+    /// Sent on connect and whenever the app in front changes kind.
+    case frontApp(FrontAppKind)
 
     public var sessionId: String? {
         switch self {
-        case .open(let id), .pin(let id, _), .icon(let id, _): return id
-        case .library: return nil
+        case .open(let id), .pin(let id, _), .icon(let id, _), .stop(let id): return id
+        case .library, .terminal, .frontApp: return nil
         }
     }
 
@@ -197,6 +207,12 @@ public enum ClientMessage: Equatable, Sendable {
             object = ["type": "icon", "id": id, "icon": ["character": icon.character, "color": icon.color]]
         case .library:
             object = ["type": "library"]
+        case .terminal:
+            object = ["type": "terminal"]
+        case .stop(let id):
+            object = ["type": "stop", "id": id]
+        case .frontApp(let kind):
+            object = ["type": "frontApp", "app": kind.rawValue]
         }
         let body = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         return String(decoding: body, as: UTF8.self)

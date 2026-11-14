@@ -42,6 +42,10 @@ final class MenuBar: NSObject, NSMenuDelegate {
         edgeItem.submenu = edges
         menu.addItem(edgeItem)
 
+        let sound = entry("Sound when done", #selector(toggleSound))
+        sound.state = Preferences.soundWhenDone ? .on : .off
+        menu.addItem(sound)
+
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Tomari", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
@@ -65,6 +69,10 @@ final class MenuBar: NSObject, NSMenuDelegate {
 
     @objc private func toggleStrip() {
         strip.hidden.toggle()
+    }
+
+    @objc private func toggleSound() {
+        Preferences.soundWhenDone.toggle()
     }
 
     @objc private func chooseEdge(_ sender: NSMenuItem) {

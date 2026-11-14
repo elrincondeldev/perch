@@ -58,6 +58,19 @@ describe("desktop sessions", () => {
     ]);
     expect(await findDesktopSession(CLI_A, sessionsDir)).toMatchObject({ title: "Panel", cwd: "/Users/dev/panel" });
   });
+
+  test("a missing sessions dir, as without the desktop app, means no desktop sessions", async () => {
+    const missing = `${dir}/missing`;
+    expect(await listDesktopSessions(missing)).toEqual([]);
+    expect(await findDesktopSession(CLI_A, missing)).toBeUndefined();
+    expect(await cliSessionIdFor(LOCAL_A, missing)).toBeNull();
+  });
+
+  test("any other failure to read the sessions dir still throws", async () => {
+    writeFileSync(log, ""); // a file, so scanning it as a dir fails with ENOTDIR
+    await expect(listDesktopSessions(log)).rejects.toThrow("ENOTDIR");
+    await expect(cliSessionIdFor(LOCAL_A, log)).rejects.toThrow("ENOTDIR");
+  });
 });
 
 test("watchDesktopFocus follows switches, skips the transient null and survives rotation", async () => {
@@ -85,6 +98,22 @@ test("a null that lasts means nothing is in front", async () => {
     appendFileSync(log, focusLine("null"));
     await waitFor(() => seen.length === 2);
     expect(seen).toEqual([CLI_A, null]);
+  } finally {
+    stop();
+  }
+});
+
+test("a missing log is checked rarely, and still picked up once it appears", async () => {
+  let reads = 0;
+  const seen: (string | null)[] = [];
+  const stop = watchDesktopFocus((id) => seen.push(id), { log, sessionsDir, pollMs: 5, missingPollMs: 80 });
+  try {
+    await Bun.sleep(60);
+    reads = seen.length;
+    writeFileSync(log, focusLine(LOCAL_A));
+    await waitFor(() => seen.length === 1);
+    expect(reads).toBe(0);
+    expect(seen).toEqual([CLI_A]);
   } finally {
     stop();
   }

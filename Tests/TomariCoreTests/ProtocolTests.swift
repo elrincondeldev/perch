@@ -79,6 +79,8 @@ func protocolTests() {
         }
         expectEqual(try object(.open(id: "abc")), ["type": "open", "id": "abc"])
         expectEqual(try object(.library), ["type": "library"])
+        expectEqual(try object(.terminal), ["type": "terminal"])
+        expectEqual(try object(.stop(id: "abc")), ["type": "stop", "id": "abc"])
         expectEqual(try object(.pin(id: "abc", pinned: true)), ["type": "pin", "id": "abc", "pinned": true])
         expectEqual(
             try object(.icon(id: "abc", icon: SessionIcon(character: "cat", color: "#4f7cff"))),
@@ -86,12 +88,36 @@ func protocolTests() {
         )
     }
 
-    test("client messages name their session, except the library request") {
+    test("client messages name their session, except the library and terminal requests") {
         let icon = SessionIcon.default
-        for message in [ClientMessage.open(id: "a"), .pin(id: "a", pinned: false), .icon(id: "a", icon: icon)] {
+        for message in [ClientMessage.open(id: "a"), .pin(id: "a", pinned: false), .icon(id: "a", icon: icon), .stop(id: "a")] {
             expectEqual(message.sessionId, "a")
         }
         expectEqual(ClientMessage.library.sessionId, nil)
+        expectEqual(ClientMessage.terminal.sessionId, nil)
+    }
+
+    test("decodes the session kind, and a message without one") {
+        let bg = sessionJSON.replacingOccurrences(of: #""icon":"#, with: #""kind":"background","icon":"#)
+        guard case .session(let a)? = ServerMessage.parse(#"{"type":"session","session":\#(bg)}"#),
+              case .session(let b)? = ServerMessage.parse(#"{"type":"session","session":\#(sessionJSON)}"#) else {
+            return expect(false, "not a session message")
+        }
+        expectEqual(a.kind, "background")
+        expectEqual(b.kind, nil)
+    }
+
+    test("only a live background session can be stopped, and an active one asks first") {
+        expectEqual(session(live: true, kind: "background").canStop, true)
+        expectEqual(session(live: false, kind: "background").canStop, false)
+        expectEqual(session(live: true, kind: "interactive").canStop, false)
+        expectEqual(session(live: true, kind: nil).canStop, false)
+        for state in [SessionState.working, .compacting, .needsPermission, .needsInput] {
+            expectEqual(session(state: state, kind: "background").stopNeedsConfirmation, true)
+        }
+        for state in [SessionState.idle, .done, .error, .ended] {
+            expectEqual(session(state: state, kind: "background").stopNeedsConfirmation, false)
+        }
     }
 
     test("the color palette matches the Pi panel's and includes the default") {

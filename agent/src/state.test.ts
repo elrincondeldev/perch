@@ -111,6 +111,32 @@ describe("applyHookEvent", () => {
     const rec = run([ev("SubagentStart", { agent_type: "Explore" }), ev("Stop"), ev("SubagentStop", { agent_type: "Explore" })]);
     expect(rec.state).toBe("done");
   });
+
+  test("a background subagent's tools do not wake a finished session", () => {
+    const sub = { agent_id: "a1b2c3", agent_type: "general-purpose" };
+    for (const end of [ev("Stop"), ev("StopFailure", { error: "rate_limit" })]) {
+      const rec = run([ev("UserPromptSubmit"), end, ev("PreToolUse", { ...bash("git clone x"), ...sub }), ev("PostToolUse", { ...bash("git clone x"), ...sub })]);
+      expect(rec.state).toBe(end.hook_event_name === "Stop" ? "done" : "error");
+      expect(rec.stateSince).toBe(T0 + 1000);
+      expect(rec.lastEventAt).toBe(T0 + 3000);
+    }
+  });
+
+  test("a subagent's tools still show while the turn runs", () => {
+    const rec = run([ev("UserPromptSubmit"), ev("PostToolUse", { ...bash("npm test"), agent_id: "a1b2c3" })]);
+    expect(rec.state).toBe("working");
+    expect(rec.activity).toBe("Bash: npm test");
+  });
+
+  test("a subagent asking you something still surfaces after the turn", () => {
+    const rec = run([ev("Stop"), ev("PreToolUse", { tool_name: "AskUserQuestion", tool_input: {}, agent_id: "a1b2c3" })]);
+    expect(rec.state).toBe("needs_input");
+  });
+
+  test("the main thread's tools wake a finished session", () => {
+    const rec = run([ev("Stop"), ev("PreToolUse", bash("ls"))]);
+    expect(rec.state).toBe("working");
+  });
 });
 
 describe("describeTool", () => {
@@ -155,6 +181,13 @@ describe("reconcile (poll of `claude agents --json`)", () => {
     expect(next!.pid).toBe(42);
   });
 
+  test("the poll records the session's kind, even when nothing else changed", () => {
+    expect(reconcile(new Map(), [agent("idle", { kind: "background" })], T0)[0]!.kind).toBe("background");
+    // As after a restart: the store doesn't keep the kind.
+    const rec = { ...run([ev("UserPromptSubmit")]), name: "Claude panel", pid: 42 };
+    expect(reconcile(records(rec), [agent("busy")], T0 + 500)).toMatchObject([{ kind: "interactive" }]);
+  });
+
   test("fresh hook state wins over a contradicting poll", () => {
     const rec = run([ev("UserPromptSubmit")]);
     const [next] = reconcile(records(rec), [agent("idle")], T0 + 1000);
@@ -169,6 +202,33 @@ describe("reconcile (poll of `claude agents --json`)", () => {
 
   test("a stale permission prompt clears once the poll says busy again", () => {
     const rec = run([ev("Notification", { notification_type: "permission_prompt", message: "…" })]);
+    const [next] = reconcile(records(rec), [agent("busy")], T0 + GRACE_MS + 1);
+    expect(next!.state).toBe("working");
+  });
+
+  test("a stale prompt clears when the poll says idle: Esc at a prompt fires no hook", () => {
+    for (const note of [
+      ev("Notification", { notification_type: "permission_prompt", message: "…" }),
+      ev("Notification", { notification_type: "elicitation_dialog", message: "…" }),
+    ]) {
+      const rec = run([note]);
+      expect(reconcile(records(rec), [agent("idle")], T0 + 1000)[0]!.state).toBe(rec.state); // hooks are fresh
+      const [next] = reconcile(records(rec), [agent("idle")], T0 + GRACE_MS + 1);
+      expect(next!.state).toBe("idle"); // not "done": that would keep the creature awake as "finished"
+      expect(next!.activity).toBeNull();
+    }
+  });
+
+  test("a busy poll does not wake a finished turn", () => {
+    // A background task keeps the poll at busy after the turn ends.
+    for (const end of [ev("Stop"), ev("StopFailure", { error: "rate_limit" })]) {
+      const rec = run([end]);
+      expect(reconcile(records(rec), [agent("busy")], T0 + GRACE_MS + 1)[0]!.state).toBe(rec.state);
+    }
+  });
+
+  test("a busy poll wakes a stale idle session", () => {
+    const rec = run([ev("SessionStart", { source: "startup" })]);
     const [next] = reconcile(records(rec), [agent("busy")], T0 + GRACE_MS + 1);
     expect(next!.state).toBe("working");
   });
