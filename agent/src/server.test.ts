@@ -262,6 +262,17 @@ test("opening a background session tells the opener its kind", async () => {
   ws.close();
 });
 
+test("a background session carries inTab on the wire, and other sessions do not", async () => {
+  await postHook({ hook_event_name: "Stop", session_id: ID, cwd: "/tmp/demo" });
+  hub.handleAgents([{ sessionId: BG, cwd: "/tmp/bg", kind: "background", status: "idle", startedAt: 0 }]);
+  hub.setTabbed(new Set([BG]));
+  const { ws, next } = await connect();
+  const snapshot = (await next()) as Extract<ServerMessage, { type: "snapshot" }>;
+  expect(snapshot.sessions.find((s) => s.id === BG)?.inTab).toBe(true);
+  expect(snapshot.sessions.find((s) => s.id === ID)).not.toHaveProperty("inTab");
+  ws.close();
+});
+
 test("opening passes the session's real title, not the label the panel shows", async () => {
   const OTHER = "9a8b7c6d-1111-4222-8333-444455556666";
   // Two untitled sessions in one folder: both get a label of folder and prompt, but neither has a title.

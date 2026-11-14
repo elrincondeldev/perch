@@ -1,21 +1,39 @@
 /**
  * Follows which session is in front in Terminal.app: every couple of seconds, one osascript call asks
- * for the tty of the selected tab of the front window, only if Terminal is running and frontmost.
- * That tty is mapped to a live session through the pid the CLI recorded in ~/.claude/sessions.
+ * for the tty and custom title of the selected tab of the front window, only if Terminal is running and
+ * frontmost. The tty is mapped to a live session through the pid the CLI recorded in ~/.claude/sessions;
+ * a tab on no session's tty (a client attached to a background session) is matched by its title instead.
  */
 import { homedir } from "node:os";
 import { isAlive, processTty, sessionPids } from "./open-session.ts";
 
 // `is running` is asked outside any `tell`, so asking never launches Terminal; and without System Events
-// there is no Accessibility prompt. An empty answer means "nothing of ours in front".
+// there is no Accessibility prompt. An empty answer means "nothing of ours in front". Otherwise the first
+// line is the front tab ("<tty> TAB <title>") and every further line is one tab's custom title, windows
+// whose tabs cannot be read (error -1728) being skipped. Read-only.
 const FRONT_TTY = `if application "Terminal" is not running then return ""
 tell application "Terminal"
 	if not frontmost then return ""
+	set frontLine to ""
 	try
-		return tty of selected tab of front window
-	on error
-		return ""
+		set t to selected tab of front window
+		set tabTitle to ""
+		try
+			set tabTitle to custom title of t
+		end try
+		set frontLine to (tty of t) & (ASCII character 9) & tabTitle
 	end try
+	set out to frontLine
+	repeat with w in windows
+		try
+			repeat with tb in tabs of w
+				try
+					set out to out & linefeed & (custom title of tb)
+				end try
+			end repeat
+		end try
+	end repeat
+	return out
 end tell`;
 
 export interface TerminalFocusOptions {
@@ -32,10 +50,14 @@ export interface TerminalFocusOptions {
   enabled?: () => boolean;
   /** Subscribes `wake` to whatever should end the wait early, e.g. Terminal coming to the front; returns an unsubscribe. */
   wakeOn?: (wake: () => void) => () => void;
-  /** Returns the front tab's tty like "/dev/ttys003", or "" when Terminal isn't in front. Replaceable for tests. */
+  /** Returns the front tab as "<tty>\t<custom title>" (tty like "/dev/ttys003"), then one line per tab title; "" when Terminal isn't in front. Replaceable for tests. */
   run?: () => Promise<string>;
+  /** Called with the custom title of every Terminal tab each time Terminal is in front (not when it isn't). */
+  onTabs?: (titles: string[]) => void;
   /** Maps a tty to the live session on it. */
   sessionForTty?: (tty: string) => Promise<string | null>;
+  /** Maps a tab's custom title, with its status glyph already stripped, to the one live session with that name. */
+  sessionForTitle?: (name: string) => string | null;
   /** Whether a session is still running; the focus is cleared once the focused one is not. Defaults to always. */
   alive?: (sessionId: string) => boolean;
   log?: (message: string) => void;
@@ -50,6 +72,26 @@ async function runFrontTty(): Promise<string> {
   );
   if (code !== 0) throw new Error(`osascript exited with ${code}${err.trim() ? `: ${err.trim().slice(0, 200)}` : ""}`);
   return out.trim();
+}
+
+/** Claude Code titles its tabs "<status glyph> <session name>"; an untitled-by-glyph tab is the bare name. */
+export function titleCandidates(title: string): string[] {
+  const names = [title];
+  if (title.length > 2 && title[1] === " ") names.push(title.slice(2));
+  return names;
+}
+
+/** Splits the script's answer into the front tab (null when unreadable) and the titles of all tabs. */
+export function parseTerminalOutput(out: string): { front: { tty: string; title: string } | null; titles: string[] } {
+  const [first = "", ...rest] = out.split("\n");
+  const [tty = "", title = ""] = first.split("\t");
+  return { front: tty ? { tty, title } : null, titles: rest.filter((line) => line !== "") };
+}
+
+/** The background sessions shown in some tab: a tab title is the session's real title, with or without the status glyph. */
+export function sessionsInTabs(titles: string[], sessions: { id: string; title: string | null; background: boolean }[]): Set<string> {
+  const shown = new Set(titles.flatMap(titleCandidates));
+  return new Set(sessions.filter((s) => s.background && s.title !== null && shown.has(s.title)).map((s) => s.id));
 }
 
 /** pid → tty never changes for a process, so ps runs once per session. */
@@ -93,7 +135,9 @@ export function watchTerminalFocus(
     enabled = () => true,
     wakeOn,
     run = runFrontTty,
+    onTabs,
     sessionForTty = ttyResolver(),
+    sessionForTitle = () => null,
     alive = () => true,
     log = (message) => console.error(message),
     sleep = Bun.sleep,
@@ -116,8 +160,17 @@ export function watchTerminalFocus(
       let wait = intervalMs;
       if (enabled()) {
         try {
-          const tty = await run();
-          const id = tty ? await sessionForTty(tty) : null;
+          const out = await run();
+          const { front, titles } = parseTerminalOutput(out);
+          if (out !== "") onTabs?.(titles);
+          const { tty, title } = front ?? { tty: "", title: "" };
+          let id = tty ? await sessionForTty(tty) : null;
+          if (!id && title) {
+            for (const name of titleCandidates(title)) {
+              id = sessionForTitle(name);
+              if (id) break;
+            }
+          }
           // Compared with the focus as it stands, not with what this watcher reported: opening a session
           // from the panel moves the focus too, and returning to the tab it left must win it back.
           const now = focused();

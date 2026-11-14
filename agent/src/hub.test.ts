@@ -425,4 +425,25 @@ describe("parseClientMessage", () => {
     ];
     for (const raw of bad) expect(parseClientMessage(raw)).toBeNull();
   });
+
+  test("tabbed background sessions are marked inTab, and only a change is announced", () => {
+    const { hub, changes } = setup();
+    hub.handleAgents([
+      { sessionId: A, name: "bg", cwd: "/x", status: "idle", startedAt: 0, kind: "background" },
+      { sessionId: B, name: "term", cwd: "/x", status: "idle", startedAt: 0, kind: "interactive" },
+    ]);
+    expect(hub.get(A)?.inTab).toBe(false);
+    expect(hub.get(B)?.inTab).toBeUndefined();
+    changes.length = 0;
+    hub.setTabbed(new Set([A]));
+    expect(changes).toEqual([{ type: "session", session: expect.objectContaining({ id: A, inTab: true }) }]);
+    hub.setTabbed(new Set([A])); // same set: silent
+    expect(changes.length).toBe(1);
+    hub.setTabbed(new Set([A, B])); // B is not a background session: nothing to announce
+    expect(changes.length).toBe(1);
+    expect(hub.get(B)?.inTab).toBeUndefined();
+    hub.setTabbed(new Set());
+    expect(changes.length).toBe(2);
+    expect(hub.get(A)?.inTab).toBe(false);
+  });
 });
