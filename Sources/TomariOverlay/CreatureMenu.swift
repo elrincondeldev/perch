@@ -15,6 +15,12 @@ enum CreatureMenu {
                 send(.stop(id: id))
             })
         }
+        // Checked when the menu opens, so a deleted folder never offers a dead item.
+        var isFolder: ObjCBool = false
+        if !session.cwd.isEmpty, FileManager.default.fileExists(atPath: session.cwd, isDirectory: &isFolder), isFolder.boolValue {
+            let folder = URL(fileURLWithPath: session.cwd)
+            menu.addItem(ActionItem("Open folder") { NSWorkspace.shared.open(folder) })
+        }
         menu.addItem(.separator())
 
         let characters = NSMenu()
