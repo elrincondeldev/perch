@@ -5,11 +5,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var link: AgentLink?
     private var strip: StripController?
     private var menuBar: MenuBar?
+    private var jumpKey: JumpHotKey?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let link = AgentLink()
         let strip = StripController(link: link)
-        menuBar = MenuBar(link: link, strip: strip)
+        let jumpKey = JumpHotKey(link: link)
+        if Preferences.jumpToWaiting { jumpKey.register() }
+        menuBar = MenuBar(link: link, strip: strip, jumpKey: jumpKey)
+        self.jumpKey = jumpKey
         self.link = link
         self.strip = strip
         link.start()

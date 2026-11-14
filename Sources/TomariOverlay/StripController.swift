@@ -226,4 +226,10 @@ enum Preferences {
         get { store.bool(forKey: "soundWhenDone") }
         set { store.set(newValue, forKey: "soundWhenDone") }
     }
+
+    /// The global ⌃⌥J shortcut that jumps to a waiting or finished session; off until the user turns it on.
+    static var jumpToWaiting: Bool {
+        get { store.bool(forKey: "jumpToWaiting") }
+        set { store.set(newValue, forKey: "jumpToWaiting") }
+    }
 }
