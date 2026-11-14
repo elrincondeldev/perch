@@ -33,6 +33,11 @@ export async function runAgent() {
     wakeOn: (wake) => front.subscribe((app) => app === "terminal" && wake()),
     alive: (id) => hub.get(id)?.live ?? false,
     current: () => hub.focusedId,
+    // A tab on a background session runs a client whose tty is not the session's: match by the tab's title.
+    sessionForTitle: (name) => {
+      const matches = hub.snapshot().filter((s) => s.live && hub.titleOf(s.id) === name);
+      return matches.length === 1 ? matches[0]!.id : null;
+    },
   });
   const pruneTimer = setInterval(() => hub.prune(), 10 * 60 * 1000);
   // One line per change, so the log shows when Terminal is asked and which focus source applies.
